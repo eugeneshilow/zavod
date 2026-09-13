@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import {
   filterClips,
@@ -918,12 +919,12 @@ export default function Studio({ documents }: { documents: ReactNode }) {
         <h1 className="sr-only">Завод · {section}</h1>
       )}
       <header className="studio-topbar">
-        <a href="/admin" className="brand" aria-label="Завод — пульт">
+        <Link href="/admin" className="brand" aria-label="Завод — пульт">
           <svg width="30" height="25" viewBox="0 0 34 28" aria-hidden="true">
             <path d="M1 27V13l10-6v7L22 7v7l5-3V1h6v26Z" fill="currentColor" />
           </svg>
           <span>ЗАВОД</span>
-        </a>
+        </Link>
         <a
           className="brand-domain"
           href="https://vibecoding.tech"

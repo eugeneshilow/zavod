@@ -38,6 +38,11 @@ markdown.renderer.rules.heading_open = (tokens, index, options, _env, self) => {
 const defaultLink = markdown.renderer.rules.link_open;
 markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
   const href = tokens[index].attrGet("href");
+  if (href === "hosting.md")
+    tokens[index].attrSet(
+      "href",
+      "https://github.com/eugeneshilow/zavod/blob/main/docs/hosting.md",
+    );
   if (href === "journal.md") tokens[index].attrSet("href", "#journal");
   if (href === "admin.md") tokens[index].attrSet("href", "#admin-spec");
   if (href === "README.md") tokens[index].attrSet("href", "#overview");
