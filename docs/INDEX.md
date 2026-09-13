@@ -2,10 +2,11 @@
 
 > **АВТОГЕНЕРАЦИЯ.** Не править руками: правь доки и прогони `pnpm docs:index`.
 > Когда читать — правило в [AGENTS.md](../AGENTS.md) («индекс — fallback на промах»).
-> Живых доков: 3.
+> Живых доков: 4.
 
 ## (корень docs/)
 
 - [DECISIONS.md](DECISIONS.md) — DECISIONS — реестр решений
 - [README.md](README.md) — zavod
+- [admin.md](admin.md) — Админка: светлый операционный терминал
 - [journal.md](journal.md) — Журнал

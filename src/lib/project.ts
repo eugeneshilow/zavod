@@ -39,13 +39,14 @@ const defaultLink = markdown.renderer.rules.link_open;
 markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
   const href = tokens[index].attrGet("href");
   if (href === "journal.md") tokens[index].attrSet("href", "#journal");
+  if (href === "admin.md") tokens[index].attrSet("href", "#admin-spec");
   if (href === "README.md") tokens[index].attrSet("href", "#overview");
   return defaultLink
     ? defaultLink(tokens, index, options, env, self)
     : self.renderToken(tokens, index, options);
 };
 
-async function readDocument(name: "README.md" | "journal.md") {
+async function readDocument(name: "README.md" | "journal.md" | "admin.md") {
   return readFile(path.join(process.cwd(), "docs", name), "utf8");
 }
 
@@ -85,10 +86,11 @@ async function readCheckResult(): Promise<CheckResult | null> {
 }
 
 export async function readAdminContent() {
-  const [overview, journal, check] = await Promise.all([
+  const [overview, journal, check, admin] = await Promise.all([
     readDocument("README.md"),
     readDocument("journal.md"),
     readCheckResult(),
+    readDocument("admin.md"),
   ]);
   const tokens = markdown.parse(journal, {});
   const decisions: Decision[] = [];
@@ -99,6 +101,7 @@ export async function readAdminContent() {
   }
   return {
     overviewHtml: markdown.render(overview),
+    adminHtml: markdown.render(admin),
     journalHtml: markdown.render(journal),
     decisions,
     check,
