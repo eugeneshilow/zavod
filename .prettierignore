@@ -1,0 +1,10 @@
+AGENTS.md
+CLAUDE.md
+CODEX.md
+docs/
+.next/
+node_modules/
+coverage/
+pnpm-lock.yaml
+next-env.d.ts
+.check-result*.json
