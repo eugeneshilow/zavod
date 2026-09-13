@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+
+vi.mock("next/server", () => ({
+  connection: vi.fn().mockResolvedValue(undefined),
+}));
 import AdminPage from "./page";
 
 test("/admin показывает первое принятое решение из настоящего журнала", async () => {

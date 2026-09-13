@@ -1,9 +1,9 @@
+import { connection } from "next/server";
 import Link from "next/link";
 import { readProjectSummary } from "@/lib/project";
 
-export const dynamic = "force-dynamic";
-
 export default async function Home() {
+  if (process.env.GITHUB_PAGES !== "true") await connection();
   const project = await readProjectSummary();
   return (
     <main className="mx-auto max-w-3xl px-6 py-20 sm:py-28">

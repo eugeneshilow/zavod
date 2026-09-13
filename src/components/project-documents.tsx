@@ -44,7 +44,13 @@ export default async function ProjectDocuments() {
           <p className="mt-2 text-sm">Этап: {check.failedStep}</p>
         )}
         <p className="mt-3 text-sm text-stone-600">
-          Обновить: <code>pnpm check</code>, затем перезагрузить страницу.
+          {process.env.GITHUB_PAGES === "true" ? (
+            "Снимок проверки на момент публикации. Обновляется вместе с сайтом."
+          ) : (
+            <>
+              Обновить: <code>pnpm check</code>, затем перезагрузить страницу.
+            </>
+          )}
         </p>
       </section>
 
