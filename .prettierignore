@@ -1,0 +1,7 @@
+AGENTS.md
+CLAUDE.md
+CODEX.md
+.next
+node_modules
+pnpm-lock.yaml
+convex/_generated
