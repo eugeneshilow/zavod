@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
@@ -6,11 +6,14 @@ import { proxy } from "@/proxy";
 import Admin from "@/app/admin/page";
 
 function envPassword(): string {
-  const line = readFileSync(".env.local", "utf8")
-    .split("\n")
-    .find((l) => l.startsWith("ADMIN_PASSWORD="));
-  if (!line) throw new Error("ADMIN_PASSWORD не найден в .env.local");
-  return line.slice("ADMIN_PASSWORD=".length).trim();
+  if (existsSync(".env.local")) {
+    const line = readFileSync(".env.local", "utf8")
+      .split("\n")
+      .find((l) => l.startsWith("ADMIN_PASSWORD="));
+    if (line) return line.slice("ADMIN_PASSWORD=".length).trim();
+  }
+  if (process.env.ADMIN_PASSWORD) return process.env.ADMIN_PASSWORD;
+  throw new Error("ADMIN_PASSWORD не найден ни в .env.local, ни в окружении");
 }
 
 describe("/admin", () => {
