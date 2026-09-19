@@ -2,9 +2,22 @@ import { execSync, spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
 const started = Date.now();
-const files = execSync("git ls-files", { encoding: "utf8" })
-  .split("\n")
-  .filter((f) => /\.(ts|tsx|mjs|js|json|css|md)$/.test(f));
+function listFiles() {
+  try {
+    return execSync("git ls-files", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).split("\n");
+  } catch {
+    // без git (сборка на хостинге): те же файлы по маске, без кешей сборщика
+    const out = execSync(
+      "find . -type f \\( -name '*.ts' -o -name '*.tsx' -o -name '*.mjs' -o -name '*.js' -o -name '*.json' -o -name '*.css' -o -name '*.md' \\) -not -path './node_modules/*' -not -path './.next/*' -not -path './.vercel/*' -not -path './convex/_generated/*'",
+      { encoding: "utf8" },
+    );
+    return out.split("\n").map((f) => f.replace(/^\.\//, ""));
+  }
+}
+const files = listFiles().filter((f) => /\.(ts|tsx|mjs|js|json|css|md)$/.test(f));
 const code = files.filter((f) => /\.(ts|tsx|mjs|js)$/.test(f));
 
 const steps = [

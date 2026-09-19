@@ -61,6 +61,7 @@ Spec-Driven Company (SDC) одной строкой: истина живёт в 
 - Сделан из: TypeScript, Next.js (App Router), Tailwind CSS, Convex (база и серверные функции, облако), Vitest, ESLint, Prettier; хостинг — Vercel.
 - Проверка: pnpm check
 - Запуск: pnpm dev → http://localhost:3000
+- Деплой: push в main → Vercel (продакшен), pull request → превью; канон — docs/deploy.md
 
 ## Проверка
 
