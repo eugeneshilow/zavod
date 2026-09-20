@@ -20,9 +20,12 @@ export const STORY = {
   musicDb: -14,
   fadeSeconds: 1.5,
   zoomTo: 1.06,
+  // Карточка дольше этого не стоит статично — включается наезд.
+  stillSeconds: 3.0,
   // Субтитры: нижняя треть кадра, водяной знак под ними.
-  sub: { font: "Arial", size: 96, outline: 6, marginV: 420 },
-  mark: { size: 40, marginV: 280, text: "vibecoding.ru" },
+  // Слово на экране: 62 % высоты кадра, чтобы не упираться в подвал.
+  sub: { font: "Arial", size: 116, outline: 8, shadow: 3, marginV: 660 },
+  mark: { size: 34, marginV: 96, text: "vibecoding.ru" },
   // Где стоит картинка в кадре: центр полосы и её предел по высоте.
   art: { centerY: 700, maxHeight: 1500 },
 };
@@ -112,12 +115,29 @@ export function parseStory(raw) {
   };
 }
 
-/** Слова так, как их видит зритель: текст истории со своей пунктуацией. */
-export function splitWords(text) {
+/**
+ * Текст бита может нести разметку SpeechKit: пауза `sil<[300]>` и ударение
+ * `**слово**`. Голосу она уходит как есть, зрителю — никогда: субтитры и счёт
+ * слов идут по очищенному тексту.
+ */
+export function cleanText(text) {
   return String(text)
+    .replace(/sil<\[\d+\]>/g, " ")
+    .replace(/\*\*/g, "")
+    .replace(/\s+([,.!?:;…])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Слова так, как их видит зритель: текст истории со своей пунктуацией.
+ * Одиночное тире — не слово: на экран не идёт и в счёт не входит.
+ */
+export function splitWords(text) {
+  return cleanText(text)
     .split(/\s+/)
     .map((w) => w.trim())
-    .filter(Boolean);
+    .filter((w) => w && !/^[—–-]+$/.test(w));
 }
 
 /**
@@ -275,10 +295,10 @@ export function buildAss(layout, total, { sub = STORY.sub, mark = STORY.mark } =
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour," +
       " BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle," +
       " BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Word,${sub.font},${sub.size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,` +
-      `-1,0,0,0,100,100,0,0,1,${sub.outline},0,2,60,60,${sub.marginV},1`,
-    `Style: Mark,${sub.font},${mark.size},&H30FFFFFF,&H30FFFFFF,&H90000000,&H00000000,` +
-      `0,0,0,0,100,100,2,0,1,3,0,2,60,60,${mark.marginV},1`,
+    `Style: Word,${sub.font},${sub.size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,` +
+      `-1,0,0,0,100,100,0,0,1,${sub.outline},${sub.shadow},2,60,60,${sub.marginV},1`,
+    `Style: Mark,${sub.font},${mark.size},&H4CFFFFFF,&H4CFFFFFF,&H90000000,&H00000000,` +
+      `0,0,0,0,100,100,2,0,1,2,0,2,60,60,${mark.marginV},1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -326,62 +346,41 @@ export function cardHtml(template, visual, story) {
   );
 }
 
-function even(n) {
-  const v = Math.max(2, Math.round(n));
-  return v % 2 === 0 ? v : v + 1;
-}
-
-/**
- * Размер и место картинки в кадре: по ширине кадра, но не выше полосы, и
- * центром выше субтитров. Всё, что осталось, закрывает размытая подложка.
- */
-export function artBox(width, height, art = STORY.art) {
-  let w = 1080;
-  let h = (height / width) * 1080;
-  if (h > art.maxHeight) {
-    h = art.maxHeight;
-    w = (width / height) * art.maxHeight;
-  }
-  w = even(w);
-  h = even(h);
-  const y = Math.round(Math.min(Math.max(art.centerY - h / 2, 0), 1920 - h));
-  return { w, h, y };
-}
-
-/**
- * Кадр 1080×1920 из картинки или куска видео: размытая подложка на весь кадр,
- * поверх — сам кадр по ширине. Чёрных полей нет. У картинки медленный наезд.
- */
-export function mediaFilter({ size, crop, zoom = false, seconds = 1 }) {
-  const scale = zoom ? 2 : 1;
-  const box = artBox(size.w, size.h);
-  const W = 1080 * scale;
-  const H = 1920 * scale;
-  const cropPart = crop ? `crop=${crop},` : "";
-  const parts = [
-    `[0:v]${cropPart}split=2[a][b]`,
-    `[a]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},` +
-      `boxblur=${20 * scale}:2,eq=brightness=-0.22,setsar=1[bg]`,
-    `[b]scale=${box.w * scale}:${box.h * scale}:flags=lanczos,setsar=1[fg]`,
-  ];
-  const overlay = `[bg][fg]overlay=(W-w)/2:${box.y * scale}`;
-  if (!zoom) {
-    parts.push(`${overlay},fps=${FPS},format=yuv420p,setsar=1[vout]`);
-    return parts.join(";");
-  }
+/** Медленный наезд 1.00 -> zoomTo за всю длину клипа, кадр 1080×1920. */
+export function zoomPart(seconds) {
   const frames = Math.max(2, Math.round(seconds * FPS));
   const step = (STORY.zoomTo - 1) / (frames - 1);
-  parts.push(
-    `${overlay},zoompan=z='min(1+${step.toFixed(8)}*on,${STORY.zoomTo})':d=1:` +
-      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=${FPS},` +
-      `format=yuv420p,setsar=1[vout]`,
+  return (
+    `zoompan=z='min(1+${step.toFixed(8)}*on,${STORY.zoomTo})':d=1:` +
+    `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=${FPS}`
   );
-  return parts.join(";");
 }
 
-/** Готовый кадр 1080×1920 (карточка): просто держится нужное время. */
-export function stillFilter() {
-  return `[0:v]scale=1080:1920,fps=${FPS},format=yuv420p,setsar=1[vout]`;
+/**
+ * Кадр 1080×1920 из картинки или куска видео: кроп заполняет кадр целиком —
+ * сначала обрезка до 9:16 по центру, потом масштаб. Ни подложки, ни полей;
+ * центральная обрезка заодно срезает чужие подписи по углам панели.
+ * У картинки и у длинного кадра — медленный наезд.
+ */
+export function mediaFilter({ crop, zoom = false, seconds = 1 } = {}) {
+  const scale = zoom ? 2 : 1;
+  const cropPart = crop ? `crop=${crop},` : "";
+  const fill =
+    `scale=${1080 * scale}:${1920 * scale}:force_original_aspect_ratio=increase:flags=lanczos,` +
+    `crop=${1080 * scale}:${1920 * scale}`;
+  const tail = zoom ? `${zoomPart(seconds)},` : "";
+  return `[0:v]${cropPart}${fill},${tail}format=yuv420p,setsar=1[vout]`;
+}
+
+/**
+ * Готовый кадр 1080×1920 (карточка). Короткий бит держится статично, длинный
+ * едет медленным наездом — карточка не стоит на экране дольше stillSeconds.
+ */
+export function stillFilter(seconds = 0) {
+  if (seconds <= STORY.stillSeconds) {
+    return `[0:v]scale=1080:1920,fps=${FPS},format=yuv420p,setsar=1[vout]`;
+  }
+  return `[0:v]scale=2160:3840:flags=lanczos,${zoomPart(seconds)},format=yuv420p,setsar=1[vout]`;
 }
 
 /** Голос и музыка: музыка тише голоса на musicDb, затухание в конце. */

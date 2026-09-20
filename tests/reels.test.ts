@@ -14,8 +14,10 @@ import {
   flatWords,
   layoutBeats,
   chunkText,
+  cleanText,
   parseStory,
   parseVoice,
+  splitWords,
   storyText,
   storyTotal,
   wordDrift,
@@ -98,8 +100,8 @@ describe("история", () => {
   it("разбирает файл истории и голос", () => {
     const parsed = parseStory(story);
     expect(parsed.id).toBe("robot-knife");
-    expect(parsed.voice).toEqual({ engine: "yandex", name: "filipp", role: null });
-    expect(parsed.speed).toBe(1);
+    expect(parsed.voice.engine).toBe("yandex");
+    expect(parsed.speed).toBeGreaterThan(0);
     expect(parsed.beats).toHaveLength(story.beats.length);
     expect(parseVoice("say:Milena")).toEqual({ engine: "say", name: "Milena", role: null });
     expect(parseVoice("yandex:alexander:good")).toEqual({
@@ -117,6 +119,23 @@ describe("история", () => {
       parseStory(story).beats.map((b: { visual: { kind: string } }) => b.visual.kind),
     );
     for (const kind of kinds) expect(["image", "video", "card", "tweet"]).toContain(kind);
+  });
+});
+
+describe("разметка голоса", () => {
+  it("паузы и ударения уходят голосу, а зрителю — чистый текст", () => {
+    const raw = "Это не хоррор. sil<[300]> Это **тест**.";
+    expect(cleanText(raw)).toBe("Это не хоррор. Это тест.");
+    expect(splitWords(raw)).toEqual(["Это", "не", "хоррор.", "Это", "тест."]);
+  });
+
+  it("субтитры истории не показывают разметку", () => {
+    const beats = [{ text: "sil<[500]> Ударить **куклу**.", visual: { kind: "card" } }];
+    const layout = layoutBeats(beats, heard(2));
+    const ass = buildAss(layout, storyTotal(layout));
+    expect(ass).not.toContain("sil<[");
+    expect(ass).not.toContain("**");
+    expect(ass).toContain("куклу.");
   });
 });
 

@@ -278,12 +278,6 @@ function sizeOf(file) {
   return { w: info.width, h: info.height, duration: info.duration };
 }
 
-function cropSize(crop, size) {
-  if (!crop) return size;
-  const [w, h] = String(crop).split(":").map(Number);
-  return { w, h };
-}
-
 /** Один кадр истории -> клип своей длительности, 1080×1920, без звука. */
 export function renderClip(visual, seconds, target, cardFile) {
   const ff = "ffmpeg";
@@ -291,18 +285,17 @@ export function renderClip(visual, seconds, target, cardFile) {
   let filter;
   if (visual.kind === "card" || visual.kind === "tweet") {
     args.push("-loop", "1", "-framerate", String(FPS), "-t", String(seconds), "-i", cardFile);
-    filter = stillFilter();
+    filter = stillFilter(seconds);
   } else if (visual.kind === "image") {
     const src = path.join(MEDIA_DIR, visual.src);
-    const size = sizeOf(src);
     args.push("-loop", "1", "-framerate", String(FPS), "-t", String(seconds), "-i", src);
-    filter = mediaFilter({ size, zoom: true, seconds });
+    filter = mediaFilter({ zoom: true, seconds });
   } else {
     const src = path.join(MEDIA_DIR, visual.src);
-    const size = sizeOf(src);
-    const from = Math.max(0, Math.min(visual.from || 0, Math.max(0, size.duration - 0.2)));
+    const duration = sizeOf(src).duration;
+    const from = Math.max(0, Math.min(visual.from || 0, Math.max(0, duration - 0.2)));
     args.push("-stream_loop", "-1", "-ss", String(from), "-t", String(seconds), "-i", src);
-    filter = mediaFilter({ size: cropSize(visual.crop, size), crop: visual.crop, seconds });
+    filter = mediaFilter({ crop: visual.crop, seconds });
   }
   args.push(
     "-filter_complex",
