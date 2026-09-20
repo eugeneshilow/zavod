@@ -12,6 +12,7 @@ import type * as crons from "../crons.js";
 import type * as services_admin_gate from "../services/admin_gate.js";
 import type * as services_instagram from "../services/instagram.js";
 import type * as services_reels_queue from "../services/reels_queue.js";
+import type * as services_telegram from "../services/telegram.js";
 import type * as tables_data_cooked_instagram_reels from "../tables/data_cooked_instagram_reels.js";
 import type * as tables_data_raw_instagram_media from "../tables/data_raw_instagram_media.js";
 import type * as tables_data_raw_instagram_metrics from "../tables/data_raw_instagram_metrics.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   "services/admin_gate": typeof services_admin_gate;
   "services/instagram": typeof services_instagram;
   "services/reels_queue": typeof services_reels_queue;
+  "services/telegram": typeof services_telegram;
   "tables/data_cooked_instagram_reels": typeof tables_data_cooked_instagram_reels;
   "tables/data_raw_instagram_media": typeof tables_data_raw_instagram_media;
   "tables/data_raw_instagram_metrics": typeof tables_data_raw_instagram_metrics;
