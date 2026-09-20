@@ -12,6 +12,21 @@
   .foot{position:absolute;left:96px;right:96px;bottom:160px;display:flex;justify-content:space-between;align-items:baseline;font-size:34px;letter-spacing:.06em;opacity:.6}
   .dots{display:flex;gap:14px}.dots i{width:18px;height:18px;border-radius:50%;background:var(--ink);opacity:.25;display:block}.dots i.on{opacity:1}
   .cover h1{font-size:132px}
+
+  /* Лекало истории (docs/reels.md, раздел «История»): карточка с цифрой и
+     карточка поста. Те же шрифты и те же цвета, что у серии. Нижняя треть
+     кадра пустая — там идут субтитры по слову. */
+  .story{position:relative;width:1080px;height:1920px;background:var(--bg,#111418);color:var(--ink,#F4F1EA)}
+  .story .stage{position:absolute;left:96px;right:96px;top:180px;bottom:620px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:48px;text-align:center}
+  .story .big{line-height:.94;font-weight:800;letter-spacing:-.04em;color:var(--accent,#F5B700)}
+  .story .big.len1{font-size:260px}.story .big.len2{font-size:180px}.story .big.len3{font-size:140px}
+  .story .small{font-size:60px;line-height:1.24;font-weight:500;max-width:840px;opacity:.92}
+  .tweet{width:860px;background:#fff;color:#0F1419;border-radius:48px;padding:72px 64px;text-align:left;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+  .tweet .who{display:flex;flex-direction:column;gap:8px}
+  .tweet .name{font-size:52px;font-weight:800;letter-spacing:-.01em}
+  .tweet .handle{font-size:40px;color:#5B7083}
+  .tweet .says{font-size:76px;line-height:1.18;font-weight:600;margin-top:44px;letter-spacing:-.02em}
+  .tweet .meta{font-size:34px;color:#5B7083;margin-top:52px}
 </style>
 <!-- data-slide: index; заполняется рендером; цвета серии: --bg --ink --accent -->
 <div class="slide" style="--bg:#F3EEE4;--ink:#141414;--accent:#D9482B">
