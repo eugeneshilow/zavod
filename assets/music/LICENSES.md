@@ -13,5 +13,4 @@
 
 ## Треки
 
-Пока ни одного. Ролики собираются с дорожкой тишины и считаются черновиками,
-пока в них не добавлена музыка.
+- `lofi-calm-zephiramusic.mp3` — «Lofi Calm» · ZephiraMusic · https://pixabay.com/music/lofi-lofi-calm-583391/ · Pixabay Content License («Free for use», коммерческое использование без указания автора; трек помечен на Pixabay как сгенерированный ИИ и «Content ID Registered» — на YouTube возможен claim, для Instagram не влияет) · 2026-09-20
