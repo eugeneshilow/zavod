@@ -272,6 +272,32 @@ export const setStatus = internalMutation({
   },
 });
 
+/**
+ * Вне очереди: перенести плановое время строк на «сейчас», не меняя статус.
+ * Следующий тик крона (или ручной runQueue) заберёт их первыми по createdAt.
+ * Берёт только approved: posted/failed/skipped не трогает. Команда для
+ * человека — docs/publish.md «Вне очереди».
+ */
+export const publishNow = internalMutation({
+  args: { ids: v.array(v.id("data_cooked_instagram_reels")), now: v.optional(v.number()) },
+  returns: v.object({ moved: v.number(), skipped: v.array(v.string()) }),
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    let moved = 0;
+    const skipped: string[] = [];
+    for (const id of args.ids) {
+      const reel = await ctx.db.get(id);
+      if (!reel || reel.status !== "approved") {
+        skipped.push(`${id}: ${reel ? reel.status : "нет строки"}`);
+        continue;
+      }
+      await ctx.db.patch(id, { scheduledAt: now });
+      moved += 1;
+    }
+    return { moved, skipped };
+  },
+});
+
 /** Последние элементы всех статусов — блок «Очередь» на /admin. */
 export const listForAdmin = query({
   args: { token: v.string(), limit: v.optional(v.number()) },
