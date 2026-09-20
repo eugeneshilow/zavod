@@ -1,4 +1,6 @@
 import { decisions, deployInfo, lastCheck, readDoc, renderMarkdown } from "@/lib/docs";
+import { loadReelsBoard } from "@/lib/reels";
+import ReelsBoard from "./reels-board";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +12,17 @@ export default async function Admin() {
       </main>
     );
   }
-  const [readme, journal, check] = await Promise.all([
+  const [readme, journal, check, board] = await Promise.all([
     readDoc("README.md"),
     readDoc("journal.md"),
     lastCheck(),
+    loadReelsBoard(),
   ]);
   const deploy = deployInfo();
   const list = decisions(journal);
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-12">
+      <ReelsBoard board={board} />
       <section className="grid gap-2 rounded border border-zinc-200 p-4 text-sm dark:border-zinc-800 sm:grid-cols-3">
         <div>
           <div className="text-zinc-500">Проверка</div>

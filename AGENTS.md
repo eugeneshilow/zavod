@@ -62,6 +62,7 @@ Spec-Driven Company (SDC) одной строкой: истина живёт в 
 - Проверка: pnpm check
 - Запуск: pnpm dev → http://localhost:3000
 - Деплой: push в main → Vercel (продакшен), pull request → превью; канон — docs/deploy.md
+- Публикация в Instagram: node scripts/reels/publish.mjs <файл> "подпись" [--type image|reels] — канон docs/publish.md
 
 ## Проверка
 
