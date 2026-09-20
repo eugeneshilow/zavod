@@ -4,9 +4,9 @@
 
 ## Устройство
 
-- **Репозиторий** — приватный `eugeneshilow/zavod-v6` на GitHub. В `main` попадают только слиянием pull request.
+- **Репозиторий** — открытый `eugeneshilow/zavod` на GitHub. В `main` попадают только слиянием pull request.
 - **Проверка** — `.github/workflows/check.yml`: на каждый pull request и на каждый push в `main` GitHub Actions ставит pnpm и запускает `pnpm check` (та же команда, что у человека на машине). Тесту нужен пароль админки: в Actions он подставляется одноразовой строкой через переменную окружения; настоящий пароль в CI не живёт.
-- **Хостинг** — Vercel, проект `zavod-v6`, привязан к репозиторию. Push в `main` собирает продакшен; pull request собирает превью. Команда сборки — в `vercel.json` и зависит от `VERCEL_ENV`: в продакшене `pnpm check && npx convex deploy --cmd 'pnpm build'`, чтобы проверка записала результат для `/admin`, а Convex задеплоился и подставил адрес базы в сборку; на превью просто `pnpm build`, приложение там работает без Convex.
+- **Хостинг** — Vercel, проект `zavod`, привязан к репозиторию. Push в `main` собирает продакшен; pull request собирает превью. Команда сборки — в `vercel.json` и зависит от `VERCEL_ENV`: в продакшене `pnpm check && npx convex deploy --cmd 'pnpm build'`, чтобы проверка записала результат для `/admin`, а Convex задеплоился и подставил адрес базы в сборку; на превью просто `pnpm build`, приложение там работает без Convex.
 - **База** — Convex в облаке, два деплоя: dev (`npx convex dev`, адрес в `.env.local`) и продакшен (создаётся `npx convex deploy` под входом человека, дальше деплоится сборкой Vercel).
 - **Стекло** — `/admin` за паролем: результат последней проверки, коммит (`VERCEL_GIT_COMMIT_SHA`) и адрес продакшена (`VERCEL_PROJECT_PRODUCTION_URL`).
 - **Иммунитет** — `.github/workflows/prod-alive.yml`: раз в час запрашивает адрес из переменной репозитория `PROD_URL` и падает, если ответ не 200.
