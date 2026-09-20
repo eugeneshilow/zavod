@@ -1,0 +1,47 @@
+{
+  "id": "words-agent-uses",
+  "kicker": "words your coding agent uses",
+  "colors": { "bg": "#F3EEE4", "ink": "#141414", "accent": "#D9482B" },
+  "cover": {
+    "title": "7 words your coding agent will say. And what they mean.",
+    "sub": "Read once. Then you can read any agent report."
+  },
+  "items": [
+    {
+      "n": "01",
+      "title": "Project folder",
+      "text": "The only folder you open. The agent keeps two things inside: the repository and its work desks."
+    },
+    {
+      "n": "02",
+      "title": "main",
+      "text": "The clean copy of your project. Nobody edits it by hand. Changes arrive only by merge."
+    },
+    {
+      "n": "03",
+      "title": "Worktree",
+      "text": "A separate desk for one task. The agent builds there, then merges. Two agents, two desks, no collisions."
+    },
+    {
+      "n": "04",
+      "title": "Check",
+      "text": "One command: formatter, linter, types, tests. Red means not done. No exceptions."
+    },
+    {
+      "n": "05",
+      "title": "Pull request",
+      "text": "A change waiting at the door. The check runs, a human says yes, the change goes in."
+    },
+    {
+      "n": "06",
+      "title": "Glass",
+      "text": "One page where the state of the machine is visible without reading code. Decisions, last check, live address."
+    },
+    {
+      "n": "07",
+      "title": "Key",
+      "text": "The one thing the agent never touches. You put it where it lives. The agent checks only its name."
+    }
+  ],
+  "outro": { "title": "Rules first. Code second.", "sub": "vibecoding.tech" }
+}

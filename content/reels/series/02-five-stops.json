@@ -1,0 +1,37 @@
+{
+  "id": "five-stops",
+  "kicker": "where an ai agent must stop",
+  "colors": { "bg": "#111418", "ink": "#F4F1EA", "accent": "#F5B700" },
+  "cover": {
+    "title": "5 places an AI agent has to stop and wait for you.",
+    "sub": "Everything else it does alone."
+  },
+  "items": [
+    {
+      "n": "01",
+      "title": "Money",
+      "text": "Buying a plan, paying a bill, moving funds. The agent prepares the page. You press pay."
+    },
+    {
+      "n": "02",
+      "title": "Keys",
+      "text": "Tokens, passwords, API keys. They never travel through the chat. You put them where they live."
+    },
+    {
+      "n": "03",
+      "title": "People's data",
+      "text": "Storing or sending personal data of others. The agent asks first, every time."
+    },
+    {
+      "n": "04",
+      "title": "Publishing",
+      "text": "Anything that leaves the repository: a post, a deploy, an email. One line, two buttons, your call."
+    },
+    {
+      "n": "05",
+      "title": "Production settings",
+      "text": "The switches that change the live machine. The agent writes the change. You flip it."
+    }
+  ],
+  "outro": { "title": "Prepare, don't execute.", "sub": "vibecoding.tech" }
+}
