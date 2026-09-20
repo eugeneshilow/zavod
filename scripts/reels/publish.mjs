@@ -3,13 +3,15 @@
 // Convex один раз и поставить по строке на каждую дверь. Дальше его сам
 // заберёт крон. Двери: Instagram и Telegram (--to, по умолчанию обе).
 // Тип материала: ролик (по умолчанию) или картинка (--type image).
-// Ключи дверей скрипт не видит: токен Instagram живёт в таблице
-// ops_instagram_state, токен Telegram — в переменных окружения Convex.
-// Канон зоны — docs/publish.md.
+// Аккаунт Instagram: --account, по умолчанию ruvibecoding.
+// Ключи дверей скрипт не видит: токены Instagram живут в таблице
+// ops_instagram_state по строке на аккаунт, токен Telegram — в переменных
+// окружения Convex. Канон зоны — docs/publish.md.
 //
 // Использование:
 //   node scripts/reels/publish.mjs path/to/reel.mp4 "подпись" [--to all] [--at "2026-09-21T09:00"] [--prod]
 //   node scripts/reels/publish.mjs path/to/post.jpg "подпись" --type image --to telegram
+//   node scripts/reels/publish.mjs path/to/reel.mp4 "подпись" --account autovibecoding
 //   node scripts/reels/publish.mjs --status        проверка связки без публикации
 
 import { execFileSync } from "node:child_process";
@@ -20,6 +22,10 @@ import { fileURLToPath } from "node:url";
 /** Двери публикации. Одна очередь, по строке на дверь. */
 export const CHANNELS = ["instagram", "telegram"];
 
+/** Аккаунты Instagram и тот, в который материал едет, когда его не назвали. */
+export const ACCOUNTS = ["ruvibecoding", "autovibecoding"];
+export const DEFAULT_ACCOUNT = "ruvibecoding";
+
 const CONTENT_TYPES = {
   ".mp4": "video/mp4",
   ".png": "image/png",
@@ -27,7 +33,7 @@ const CONTENT_TYPES = {
   ".jpeg": "image/jpeg",
 };
 
-const FLAGS_WITH_VALUE = new Set(["--at", "--type", "--to"]);
+const FLAGS_WITH_VALUE = new Set(["--at", "--type", "--to", "--account"]);
 
 /** В какие двери просят положить материал: instagram, telegram, обе или список. */
 export function parseChannels(value) {
@@ -46,6 +52,23 @@ export function parseChannels(value) {
   }
   if (asked.length === 0) throw new Error("после --to нужна дверь: instagram, telegram или all");
   return [...new Set(asked)];
+}
+
+/**
+ * В какой аккаунт Instagram едет материал. Имя не названо — ruvibecoding:
+ * русские истории теперь основной поток, английский пилот просят явно.
+ * Выдуманное имя останавливает команду до заливки файла: опечатка в аккаунте
+ * означала бы строку, которую ни одна дверь не заберёт.
+ */
+export function parseAccount(value) {
+  const raw = String(value ?? DEFAULT_ACCOUNT)
+    .toLowerCase()
+    .trim();
+  if (raw === "") return DEFAULT_ACCOUNT;
+  if (!ACCOUNTS.includes(raw)) {
+    throw new Error(`не понял аккаунт «${raw}»: бывает ${ACCOUNTS.join(" или ")}`);
+  }
+  return raw;
 }
 
 /** Ролик или картинка. */
@@ -71,6 +94,7 @@ export function parseArgs(argv) {
   const [filePath, caption] = positional;
   const mediaType = parseMediaType(flagValue("--type"));
   const channels = parseChannels(flagValue("--to"));
+  const account = parseAccount(flagValue("--account"));
 
   const at = flagValue("--at");
   let scheduledAt;
@@ -98,6 +122,7 @@ export function parseArgs(argv) {
     caption: caption ?? "",
     mediaType,
     channels,
+    account,
     scheduledAt,
     contentType,
     prod: argv.includes("--prod"),
@@ -138,13 +163,15 @@ async function main(argv) {
   }
 
   if (plan.status) {
-    console.log(runConvex("workflows/instagram_publishing:status", {}, plan.prod));
+    console.log(
+      runConvex("workflows/instagram_publishing:status", { account: plan.account }, plan.prod),
+    );
     return;
   }
 
   if (!plan.filePath) {
     console.error(
-      'usage: node scripts/reels/publish.mjs <файл> "подпись" [--to instagram|telegram|all] [--type image|reels] [--at <дата>] [--prod]',
+      'usage: node scripts/reels/publish.mjs <файл> "подпись" [--to instagram|telegram|all] [--type image|reels] [--account ruvibecoding|autovibecoding] [--at <дата>] [--prod]',
     );
     process.exit(1);
   }
@@ -170,14 +197,23 @@ async function main(argv) {
 
   // Файл один, строк столько, сколько дверей, и плановое время у них общее.
   const scheduledAt = plan.scheduledAt ?? Date.now();
-  console.log(`файл на месте (${storageId}); ставлю в очередь: ${plan.channels.join(", ")}...`);
+  console.log(
+    `файл на месте (${storageId}); ставлю в очередь: ${plan.channels.join(", ")} · аккаунт ${plan.account}...`,
+  );
 
   let failed = 0;
   for (const channel of plan.channels) {
     try {
       const result = runConvex(
         "tables/data_cooked_instagram_reels:enqueueFromStorage",
-        { storageId, caption: plan.caption, channel, mediaType: plan.mediaType, scheduledAt },
+        {
+          storageId,
+          caption: plan.caption,
+          channel,
+          mediaType: plan.mediaType,
+          account: plan.account,
+          scheduledAt,
+        },
         plan.prod,
       );
       console.log(`${channel}: в очереди · ${JSON.stringify(result)}`);

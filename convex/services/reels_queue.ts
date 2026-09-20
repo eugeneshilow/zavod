@@ -35,6 +35,18 @@ export function videoSourceOf(args: {
     : { kind: "storage", storageId: args.storageId as string };
 }
 
+/**
+ * Чьим токеном публиковать: строго токеном того аккаунта, чей материал забрала
+ * дверь. Чужой токен не подставляется даже когда он один-единственный — пост
+ * уехал бы не в тот аккаунт, и это необратимо.
+ */
+export function stateForAccount<T extends { account: string }>(
+  states: readonly T[],
+  account: string,
+): T | null {
+  return states.find((state) => state.account === account) ?? null;
+}
+
 export type FailurePlan =
   | { status: "approved"; attempts: number; scheduledAt: number; alert: false }
   | { status: "failed"; attempts: number; alert: true };

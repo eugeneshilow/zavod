@@ -1,11 +1,15 @@
 // Instagram Platform API (Business Login for Instagram) — чистый сервис без
 // Convex ctx, тестируемый с моками fetch. Публикация роликов и картинок: контейнер,
 // ожидание обработки, media_publish, permalink, insights, лимит публикаций,
-// продление long-lived токена. Канон зоны — docs/publish.md.
+// обмен кода входа на токен и продление long-lived токена. Один и тот же сервис
+// обслуживает любой аккаунт: токен всегда приходит аргументом.
+// Канон зоны — docs/publish.md.
 // Каркас снят с рельсы проекта vibecoding-ru (convex/services/instagram.ts).
 
 const GRAPH = "https://graph.instagram.com/v23.0";
 const REFRESH_URL = "https://graph.instagram.com/refresh_access_token";
+const EXCHANGE_LONG_URL = "https://graph.instagram.com/access_token";
+const OAUTH_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 const TIMEOUT_MS = 30_000;
 const DAY_MS = 86_400_000;
 
@@ -101,6 +105,74 @@ export async function getFollowersCount(token: string): Promise<number | null> {
   }
 }
 
+/** Куда Instagram возвращает человека после входа. Страницы там нет: нужен код. */
+export const DEFAULT_REDIRECT_URI = "https://vibecoding.ru/ig-oauth";
+
+export type OauthExchangePlan =
+  | { ok: true; clientSecret: string; code: string; redirectUri: string }
+  | { ok: false; reason: string };
+
+/**
+ * Что нужно проверить до первого запроса наружу: секрет приложения на месте, а
+ * код входа очищен. Instagram дописывает к коду в адресной строке хвост «#_» —
+ * с ним Meta код не принимает, и человек видел бы отказ вместо токена.
+ */
+export function oauthExchangePlan(args: {
+  clientSecret: string | undefined;
+  code: string;
+  redirectUri?: string;
+}): OauthExchangePlan {
+  if (!args.clientSecret) {
+    return { ok: false, reason: "в Convex env нет INSTAGRAM_APP_SECRET — обмен невозможен" };
+  }
+  const code = args.code.trim().replace(/#_+$/, "");
+  if (code.length === 0) return { ok: false, reason: "код входа пуст" };
+  return {
+    ok: true,
+    clientSecret: args.clientSecret,
+    code,
+    redirectUri: args.redirectUri ?? DEFAULT_REDIRECT_URI,
+  };
+}
+
+/**
+ * Шаг 1 входа: одноразовый code из редиректа business login → короткий токен
+ * (живёт час). redirectUri обязан побайтово совпадать с настройкой в App
+ * Dashboard, иначе Meta отказывает именно здесь.
+ */
+export async function exchangeCodeForShortLivedToken(args: {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  code: string;
+}): Promise<{ accessToken: string; userId: string }> {
+  const json = await postForm(OAUTH_TOKEN_URL, {
+    client_id: args.clientId,
+    client_secret: args.clientSecret,
+    grant_type: "authorization_code",
+    redirect_uri: args.redirectUri,
+    code: args.code,
+  });
+  const accessToken = json.access_token;
+  if (typeof accessToken !== "string" || accessToken.length === 0) {
+    throw new Error("Instagram OAuth: ответ без access_token");
+  }
+  return { accessToken, userId: String(json.user_id ?? "") };
+}
+
+/** Шаг 2 входа: короткий токен → long-lived (60 дней). */
+export async function exchangeForLongLivedToken(
+  clientSecret: string,
+  shortLivedToken: string,
+): Promise<{ accessToken: string; expiresInSec: number }> {
+  const json = await getJson(
+    `${EXCHANGE_LONG_URL}?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(
+      clientSecret,
+    )}&access_token=${encodeURIComponent(shortLivedToken)}`,
+  );
+  return parseTokenResponse(json, "exchange");
+}
+
 /** Продлить long-lived токен (валиден: токену больше суток и он ещё жив). */
 export async function refreshLongLivedToken(
   token: string,
@@ -108,10 +180,17 @@ export async function refreshLongLivedToken(
   const json = await getJson(
     `${REFRESH_URL}?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`,
   );
+  return parseTokenResponse(json, "refresh");
+}
+
+function parseTokenResponse(
+  json: Record<string, unknown>,
+  stage: string,
+): { accessToken: string; expiresInSec: number } {
   const accessToken = json.access_token;
   const expiresIn = json.expires_in;
   if (typeof accessToken !== "string" || typeof expiresIn !== "number") {
-    throw new Error("Instagram refresh: ответ без access_token/expires_in");
+    throw new Error(`Instagram ${stage}: ответ без access_token/expires_in`);
   }
   return { accessToken, expiresInSec: expiresIn };
 }
