@@ -16,6 +16,7 @@ zavod — заготовка проекта, собранная как Spec-Driv
 - ⚖️ go-online-github-vercel-convex — проект живёт онлайн: GitHub, Vercel, Convex в облаке; с 20.09 репозиторий открытый (⚖️ public-zavod).
 - ⚖️ reels-straight-to-instagram — ролики и картинки едут в Instagram сами: очередь, крон, метрики, пауза кнопкой.
 - ⚖️ telegram-door — у той же очереди вторая дверь: тот же ролик едет ещё и в канал Telegram, тумблер у каждой двери свой.
+- ⚖️ second-instagram-account — аккаунтов Instagram два: `ruvibecoding` (по умолчанию) и `autovibecoding`; токен каждого машина получает в обмен на код входа.
 
 ## Где что лежит
 
