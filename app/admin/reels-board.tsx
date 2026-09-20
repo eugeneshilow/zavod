@@ -76,11 +76,21 @@ export default function ReelsBoard({ board }: { board: ReelsBoardData | { reason
             <ChannelSwitch key={name} name={name} state={board.channels[name]} />
           ))}
         </div>
-        <p className="mb-3 text-sm text-zinc-500">
-          Токен: {board.state.hasToken ? "на месте" : "нет"} · аккаунт{" "}
-          {board.state.username ? `@${board.state.username}` : board.state.account} · токен до{" "}
-          {moscow(board.state.expiresAt)} · последний прогон {moscow(board.state.lastRunAt)}
-        </p>
+        {board.state.length === 0 ? (
+          <p className="mb-3 text-sm text-zinc-500">
+            Ни один аккаунт Instagram не подключён: токена нет. Как его получить — docs/publish.md,
+            «Как аккаунт получает токен».
+          </p>
+        ) : (
+          <div className="mb-3 text-sm text-zinc-500">
+            {board.state.map((row) => (
+              <p key={row.account}>
+                Аккаунт {row.username ? `@${row.username}` : row.account} · токен на месте, до{" "}
+                {moscow(row.expiresAt)} · последний прогон {moscow(row.lastRunAt)}
+              </p>
+            ))}
+          </div>
+        )}
         {board.queue.length === 0 ? (
           <p className="text-sm text-zinc-500">Очередь пуста.</p>
         ) : (
@@ -90,6 +100,7 @@ export default function ReelsBoard({ board }: { board: ReelsBoardData | { reason
                 <tr>
                   <th className="py-1 pr-3">Статус</th>
                   <th className="py-1 pr-3">Дверь</th>
+                  <th className="py-1 pr-3">Аккаунт</th>
                   <th className="py-1 pr-3">Тип</th>
                   <th className="py-1 pr-3">Подпись</th>
                   <th className="py-1 pr-3">План</th>
@@ -103,6 +114,7 @@ export default function ReelsBoard({ board }: { board: ReelsBoardData | { reason
                   <tr key={row._id} className="border-t border-zinc-100 dark:border-zinc-900">
                     <td className="py-1 pr-3">{STATUS_LABEL[row.status] ?? row.status}</td>
                     <td className="py-1 pr-3">{row.channel ?? "instagram"}</td>
+                    <td className="py-1 pr-3">{row.account}</td>
                     <td className="py-1 pr-3">
                       {row.mediaType === "IMAGE" ? "картинка" : "ролик"}
                     </td>

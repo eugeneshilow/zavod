@@ -151,6 +151,8 @@ export const backfillChannel = internalMutation({
  * уводится в skipped до claim и роняет одну общую запись в ops_alerts.
  * Дверь берёт только свои строки: индекс by_channel_status_scheduled не видит
  * строку без поля channel — старую очередь чинит backfillChannel.
+ * Имя аккаунта не передано — годится материал любого аккаунта: дверь узнаёт
+ * аккаунт из забранной строки и уже под него берёт токен.
  */
 export const claimNext = internalMutation({
   args: {
@@ -159,7 +161,6 @@ export const claimNext = internalMutation({
     account: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const account = args.account ?? DEFAULT_ACCOUNT;
     const channel = args.channel ?? DEFAULT_CHANNEL;
     const approved = await ctx.db
       .query("data_cooked_instagram_reels")
@@ -168,7 +169,11 @@ export const claimNext = internalMutation({
       )
       .collect();
     const due = approved
-      .filter((reel) => reel.account === account && (reel.scheduledAt ?? 0) <= args.now)
+      .filter(
+        (reel) =>
+          (args.account === undefined || reel.account === args.account) &&
+          (reel.scheduledAt ?? 0) <= args.now,
+      )
       .sort((a, b) => a.createdAt - b.createdAt);
 
     const staleHours = Math.round(MAX_QUEUE_AGE_MS / 3_600_000);
@@ -192,7 +197,7 @@ export const claimNext = internalMutation({
     if (skippedStale > 0) {
       await ctx.db.insert("ops_alerts", {
         kind: "instagram_queue_stale",
-        message: `Очередь двери ${channel} протухла («${account}»): ${skippedStale} approved-роликов старше ${staleHours} ч уведены в skipped`,
+        message: `Очередь двери ${channel} протухла: ${skippedStale} approved-роликов старше ${staleHours} ч уведены в skipped`,
         at: Date.now(),
       });
     }
@@ -340,14 +345,18 @@ export const health = query({
     };
     const ofChannel = (channel: "instagram" | "telegram") =>
       rows.filter((row) => (row.channel ?? DEFAULT_CHANNEL) === channel);
-    const state = await ctx.db.query("ops_instagram_state").first();
+    // Прогон один на всю дверь, а строк состояния столько, сколько аккаунтов:
+    // сторожу нужна самая свежая отметка, а не отметка первой строки.
+    const runs = (await ctx.db.query("ops_instagram_state").collect())
+      .map((state) => state.lastRunAt)
+      .filter((at): at is number => typeof at === "number");
     return {
       queue: counts(rows),
       byChannel: {
         instagram: counts(ofChannel("instagram")),
         telegram: counts(ofChannel("telegram")),
       },
-      lastRunAt: state?.lastRunAt ?? null,
+      lastRunAt: runs.length > 0 ? Math.max(...runs) : null,
       cronsEnabled: process.env.INSTAGRAM_CRONS_ENABLED === "true",
     };
   },

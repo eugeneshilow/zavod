@@ -36,13 +36,13 @@ export type ReelsBoardData = {
   queue: QueueRow[];
   airtime: AirtimeRow[];
   channels: Record<Channel, ChannelState>;
+  /** По строке на аккаунт Instagram: чей токен, до когда и когда был прогон. */
   state: {
-    hasToken: boolean;
     account: string;
     username: string | null;
-    expiresAt: number | null;
+    expiresAt: number;
     lastRunAt: number | null;
-  };
+  }[];
   account: {
     followers: number | null;
     quotaUsage: number | null;
@@ -74,13 +74,12 @@ export async function loadReelsBoard(): Promise<ReelsBoardData | { reason: strin
       queue,
       airtime,
       channels: { instagram: stateOf("instagram"), telegram: stateOf("telegram") },
-      state: {
-        hasToken: state.hasToken,
-        account: state.account,
-        username: state.username,
-        expiresAt: state.expiresAt,
-        lastRunAt: state.lastRunAt,
-      },
+      state: state.map((row) => ({
+        account: row.account,
+        username: row.username,
+        expiresAt: row.expiresAt,
+        lastRunAt: row.lastRunAt,
+      })),
       account: snapshot
         ? {
             followers: snapshot.followers ?? null,

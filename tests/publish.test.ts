@@ -1,11 +1,18 @@
-import { describe, expect, it } from "vitest";
-import { containerFields, igError } from "@/convex/services/instagram";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  DEFAULT_REDIRECT_URI,
+  containerFields,
+  exchangeCodeForShortLivedToken,
+  igError,
+  oauthExchangePlan,
+} from "@/convex/services/instagram";
 import {
   MAX_ATTEMPTS,
   MAX_QUEUE_AGE_MS,
   RETRY_DELAY_MS,
   isStaleForPosting,
   planAfterFailure,
+  stateForAccount,
   videoSourceOf,
 } from "@/convex/services/reels_queue";
 import {
@@ -17,12 +24,23 @@ import {
   trimCaption,
   withoutToken,
 } from "@/convex/services/telegram";
-import { CHANNELS, parseArgs, parseChannels } from "@/scripts/reels/publish.mjs";
+import {
+  ACCOUNTS,
+  CHANNELS,
+  DEFAULT_ACCOUNT,
+  parseAccount,
+  parseArgs,
+  parseChannels,
+} from "@/scripts/reels/publish.mjs";
 
 // Правила очереди публикации, которые уже стоили бы денег или репутации:
 // два поста из одного ролика, пост задним числом, ролик, потерянный после
 // одной сетевой ошибки, токен в тексте ошибки, материал, уехавший не в ту
-// дверь. Канон зоны — docs/publish.md.
+// дверь и не в тот аккаунт. Канон зоны — docs/publish.md.
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("источник видео", () => {
   it("принимает только адрес", () => {
@@ -238,6 +256,86 @@ describe("дверь Telegram: ошибки и токен", () => {
   });
 });
 
+describe("аккаунты Instagram: чьим токеном публикуем", () => {
+  const states = [
+    { account: "autovibecoding", accessToken: "token-auto" },
+    { account: "ruvibecoding", accessToken: "token-ru" },
+  ];
+
+  it("берёт токен того аккаунта, чей материал", () => {
+    expect(stateForAccount(states, "ruvibecoding")?.accessToken).toBe("token-ru");
+    expect(stateForAccount(states, "autovibecoding")?.accessToken).toBe("token-auto");
+  });
+
+  it("не подставляет чужой токен, когда своего нет", () => {
+    expect(stateForAccount([states[0]], "ruvibecoding")).toBeNull();
+    expect(stateForAccount([], "ruvibecoding")).toBeNull();
+  });
+});
+
+describe("обмен кода входа на токен", () => {
+  it("отрезает хвост «#_», который Instagram дописывает в адресной строке", () => {
+    const plan = oauthExchangePlan({ clientSecret: "s3cret", code: "AQxyz#_" });
+    expect(plan.ok).toBe(true);
+    expect(plan.ok && plan.code).toBe("AQxyz");
+    expect(plan.ok && plan.redirectUri).toBe(DEFAULT_REDIRECT_URI);
+  });
+
+  it("без секрета приложения отвечает отказом, а не падает", () => {
+    const plan = oauthExchangePlan({ clientSecret: undefined, code: "AQxyz" });
+    expect(plan.ok).toBe(false);
+    expect(plan.ok === false && plan.reason).toMatch(/INSTAGRAM_APP_SECRET/);
+  });
+
+  it("пустой код не отправляется наружу", () => {
+    expect(oauthExchangePlan({ clientSecret: "s3cret", code: "  #_" }).ok).toBe(false);
+  });
+
+  it("адрес возврата можно задать явно", () => {
+    const plan = oauthExchangePlan({
+      clientSecret: "s3cret",
+      code: "AQxyz",
+      redirectUri: "https://example.com/back",
+    });
+    expect(plan.ok && plan.redirectUri).toBe("https://example.com/back");
+  });
+
+  it("код уходит в Meta формой, вместе с секретом и адресом возврата", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ access_token: "short-token", user_id: 777 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await exchangeCodeForShortLivedToken({
+      clientId: "1234",
+      clientSecret: "s3cret",
+      redirectUri: DEFAULT_REDIRECT_URI,
+      code: "AQxyz",
+    });
+    expect(result).toEqual({ accessToken: "short-token", userId: "777" });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.instagram.com/oauth/access_token");
+    const sent = new URLSearchParams(String(init.body));
+    expect(sent.get("grant_type")).toBe("authorization_code");
+    expect(sent.get("code")).toBe("AQxyz");
+    expect(sent.get("redirect_uri")).toBe(DEFAULT_REDIRECT_URI);
+  });
+
+  it("ответ без токена не выдаётся за успех", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ user_id: 777 })),
+    );
+    await expect(
+      exchangeCodeForShortLivedToken({
+        clientId: "1234",
+        clientSecret: "s3cret",
+        redirectUri: DEFAULT_REDIRECT_URI,
+        code: "AQxyz",
+      }),
+    ).rejects.toThrow(/без access_token/);
+  });
+});
+
 describe("двери в командной строке", () => {
   it("по умолчанию материал едет в обе двери", () => {
     expect(parseChannels(undefined)).toEqual(["instagram", "telegram"]);
@@ -261,7 +359,24 @@ describe("двери в командной строке", () => {
     expect(plan.channels).toEqual(["telegram"]);
     expect(plan.mediaType).toBe("REELS");
     expect(plan.contentType).toBe("video/mp4");
+    expect(plan.account).toBe("ruvibecoding");
     expect(plan.prod).toBe(true);
+  });
+
+  it("аккаунт не назван — материал едет в ruvibecoding", () => {
+    expect(DEFAULT_ACCOUNT).toBe("ruvibecoding");
+    expect(parseAccount(undefined)).toBe("ruvibecoding");
+    expect(ACCOUNTS).toContain("autovibecoding");
+  });
+
+  it("английский пилот просят явно", () => {
+    const plan = parseArgs(["out/reel.mp4", "подпись", "--account", "autovibecoding"]);
+    expect(plan.account).toBe("autovibecoding");
+    expect(plan.filePath).toBe("out/reel.mp4");
+  });
+
+  it("не пропускает выдуманный аккаунт", () => {
+    expect(() => parseAccount("ruvibecodng")).toThrow(/не понял аккаунт/);
   });
 
   it("картинка требует картиночного файла", () => {
