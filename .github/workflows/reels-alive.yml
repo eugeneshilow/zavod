@@ -1,0 +1,18 @@
+name: reels-alive
+
+on:
+  schedule:
+    - cron: "42 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: reels rail answers 200 and nothing failed
+        run: |
+          test -n "${{ vars.PROD_URL }}" || { echo "PROD_URL is not set"; exit 1; }
+          body=$(curl -fsS --max-time 30 "${{ vars.PROD_URL }}/api/reels/health")
+          echo "$body"
+          failed=$(echo "$body" | jq -r '.queue.failed')
+          test "$failed" = "0" || { echo "reels queue has $failed failed item(s)"; exit 1; }
