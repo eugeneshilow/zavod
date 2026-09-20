@@ -1,8 +1,10 @@
-import type { ReelsBoardData } from "@/lib/reels";
-import { delta, moscow, num } from "@/lib/reels";
-import { setInstagramChannel } from "./actions";
+import type { Channel, ChannelState, ReelsBoardData } from "@/lib/reels";
+import { CHANNELS, delta, moscow, num } from "@/lib/reels";
+import { setChannelState } from "./actions";
 
-// Два блока стекла рельсы публикации: очередь и эфир. Канон — docs/publish.md.
+// Два блока стекла рельсы публикации: очередь и эфир. Очередь одна, дверей
+// две — у каждой своя кнопка паузы. Блок «Эфир» — только про Instagram:
+// цифры по каналу Telegram Bot API не отдаёт. Канон — docs/publish.md.
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "черновик",
@@ -12,6 +14,38 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "не уехал",
   skipped: "протух",
 };
+
+const CHANNEL_LABEL: Record<Channel, string> = {
+  instagram: "Instagram",
+  telegram: "Telegram",
+};
+
+/** Тумблер одной двери: состояние словами и кнопка, которая его меняет. */
+function ChannelSwitch({ name, state }: { name: Channel; state: ChannelState }) {
+  const paused = state?.action !== "on";
+  return (
+    <form action={setChannelState} className="flex flex-wrap items-center gap-2 text-sm">
+      <input type="hidden" name="channel" value={name} />
+      <input type="hidden" name="action" value={paused ? "on" : "off"} />
+      <span data-testid={`channel-state-${name}`}>
+        {CHANNEL_LABEL[name]}: <strong>{paused ? "на паузе" : "включён"}</strong>
+        {state ? ` · ${state.reason} · ${moscow(state.createdAt)}` : ""}
+      </span>
+      <input
+        type="text"
+        name="reason"
+        placeholder="причина"
+        className="rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      <button
+        type="submit"
+        className="rounded border border-zinc-300 px-3 py-1 dark:border-zinc-700"
+      >
+        {paused ? "Включить" : "Поставить на паузу"}
+      </button>
+    </form>
+  );
+}
 
 function Frame({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -34,32 +68,13 @@ export default function ReelsBoard({ board }: { board: ReelsBoardData | { reason
     );
   }
 
-  const paused = board.channel?.action !== "on";
-  const nextAction = paused ? "on" : "off";
-
   return (
     <>
       <Frame title="Очередь Reels">
-        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-          <span data-testid="channel-state">
-            Канал: <strong>{paused ? "на паузе" : "включён"}</strong>
-            {board.channel ? ` · ${board.channel.reason} · ${moscow(board.channel.createdAt)}` : ""}
-          </span>
-          <form action={setInstagramChannel} className="flex items-center gap-2">
-            <input type="hidden" name="action" value={nextAction} />
-            <input
-              type="text"
-              name="reason"
-              placeholder="причина"
-              className="rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <button
-              type="submit"
-              className="rounded border border-zinc-300 px-3 py-1 dark:border-zinc-700"
-            >
-              {paused ? "Включить канал" : "Поставить на паузу"}
-            </button>
-          </form>
+        <div className="mb-4 flex flex-col gap-2">
+          {CHANNELS.map((name) => (
+            <ChannelSwitch key={name} name={name} state={board.channels[name]} />
+          ))}
         </div>
         <p className="mb-3 text-sm text-zinc-500">
           Токен: {board.state.hasToken ? "на месте" : "нет"} · аккаунт{" "}
@@ -74,6 +89,7 @@ export default function ReelsBoard({ board }: { board: ReelsBoardData | { reason
               <thead className="text-zinc-500">
                 <tr>
                   <th className="py-1 pr-3">Статус</th>
+                  <th className="py-1 pr-3">Дверь</th>
                   <th className="py-1 pr-3">Тип</th>
                   <th className="py-1 pr-3">Подпись</th>
                   <th className="py-1 pr-3">План</th>
@@ -86,12 +102,25 @@ export default function ReelsBoard({ board }: { board: ReelsBoardData | { reason
                 {board.queue.map((row) => (
                   <tr key={row._id} className="border-t border-zinc-100 dark:border-zinc-900">
                     <td className="py-1 pr-3">{STATUS_LABEL[row.status] ?? row.status}</td>
+                    <td className="py-1 pr-3">{row.channel ?? "instagram"}</td>
                     <td className="py-1 pr-3">
                       {row.mediaType === "IMAGE" ? "картинка" : "ролик"}
                     </td>
                     <td className="py-1 pr-3">{row.caption.slice(0, 60)}</td>
                     <td className="py-1 pr-3">{moscow(row.scheduledAt)}</td>
-                    <td className="py-1 pr-3">{moscow(row.postedAt)}</td>
+                    <td className="py-1 pr-3">
+                      {row.permalink ? (
+                        <a
+                          href={row.permalink}
+                          className="underline underline-offset-4"
+                          rel="noreferrer"
+                        >
+                          {moscow(row.postedAt)}
+                        </a>
+                      ) : (
+                        moscow(row.postedAt)
+                      )}
+                    </td>
                     <td className="py-1 pr-3">{row.attempts}</td>
                     <td className="py-1 text-zinc-500">{row.error ?? ""}</td>
                   </tr>

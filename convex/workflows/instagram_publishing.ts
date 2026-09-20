@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { internalAction, internalMutation } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
+import { internalAction, internalMutation, type ActionCtx } from "../_generated/server";
+import { sendMedia } from "../services/telegram";
 import {
   getFollowersCount,
   getMediaInsights,
@@ -13,10 +15,12 @@ import {
   shouldRefreshToken,
 } from "../services/instagram";
 
-// Рельса автопостинга: ролики и картинки. Вход — файл в хранилище, дальше очередь
-// data_cooked_instagram_reels и три крона: публикация, сбор цифр, продление
-// токена. Токен живёт в ops_instagram_state и наружу не выходит.
-// Канон зоны, гейты и команды для человека — docs/publish.md.
+// Рельса автопостинга: ролики и картинки. Вход — файл в хранилище, дальше одна
+// очередь data_cooked_instagram_reels с двумя дверями (Instagram и Telegram) и
+// три крона: публикация, сбор цифр, продление токена Instagram. Токен
+// Instagram живёт в ops_instagram_state, токен Telegram — в Convex env; наружу
+// не выходит ни один. Цифры Telegram Bot API не отдаёт, крон метрик его не
+// касается. Канон зоны, гейты и команды для человека — docs/publish.md.
 
 const DAY_MS = 86_400_000;
 
@@ -64,7 +68,123 @@ export const status = internalAction({
   },
 });
 
-/** Крон-воркер очереди: за прогон публикует не больше одного материала. */
+type DoorRun = { posted: number; reason: string };
+
+/** Упавшая публикация: счётчик попыток и текст для отчёта прогона. */
+async function noteFailure(
+  ctx: ActionCtx,
+  id: Id<"data_cooked_instagram_reels">,
+  error: unknown,
+): Promise<DoorRun> {
+  const message = errorMessage(error);
+  const outcome = await ctx.runMutation(internal.tables.data_cooked_instagram_reels.markFailed, {
+    id,
+    error: message,
+  });
+  const tail =
+    outcome.status === "approved"
+      ? `попытка ${outcome.attempts}, вернул в очередь через два часа`
+      : "третья неудача, материал погашен";
+  return { posted: 0, reason: `ошибка: ${message} (${tail})` };
+}
+
+/** Дверь Instagram: тумблер канала, живой токен, квота, один материал. */
+async function runInstagramDoor(ctx: ActionCtx): Promise<DoorRun> {
+  const channelOn: boolean = await ctx.runQuery(internal.tables.ops_channel_toggles.isEnabled, {
+    channel: "instagram",
+    defaultEnabled: false,
+  });
+  if (!channelOn) return { posted: 0, reason: "канал на паузе (тумблер на /admin)" };
+
+  const state = await ctx.runQuery(internal.tables.ops_instagram_state.get, {});
+  if (!state) return { posted: 0, reason: "нет токена в ops_instagram_state" };
+
+  const limit = await getPublishingLimit(state.accessToken);
+  if (limit && limit.quotaUsage >= limit.quotaTotal) {
+    return { posted: 0, reason: "суточная квота публикаций исчерпана" };
+  }
+
+  const next = await ctx.runMutation(internal.tables.data_cooked_instagram_reels.claimNext, {
+    now: Date.now(),
+    channel: "instagram",
+    account: state.account,
+  });
+  if (!next) return { posted: 0, reason: "очередь пуста" };
+
+  try {
+    const fileUrl = next.storageId ? await ctx.storage.getUrl(next.storageId) : next.videoUrl;
+    if (!fileUrl) throw new Error(`источник файла недоступен для ${next._id}`);
+
+    const posted = await publishMedia(state.accessToken, {
+      fileUrl,
+      mediaType: next.mediaType ?? "REELS",
+      caption: next.caption,
+      isAiGenerated: true,
+    });
+    await ctx.runMutation(internal.tables.data_cooked_instagram_reels.markPosted, {
+      id: next._id,
+      mediaId: posted.mediaId,
+      permalink: posted.permalink,
+      postedAt: Date.now(),
+    });
+    return { posted: 1, reason: posted.permalink ?? posted.mediaId };
+  } catch (error) {
+    return await noteFailure(ctx, next._id, error);
+  }
+}
+
+/**
+ * Дверь Telegram: тумблер канала, оба ключа в Convex env, один материал.
+ * Telegram сам выкачивает файл по адресу хранилища; токен наружу не выходит
+ * даже в тексте ошибки — его вырезает withoutToken в сервисе.
+ */
+async function runTelegramDoor(ctx: ActionCtx): Promise<DoorRun> {
+  const channelOn: boolean = await ctx.runQuery(internal.tables.ops_channel_toggles.isEnabled, {
+    channel: "telegram",
+    defaultEnabled: false,
+  });
+  if (!channelOn) return { posted: 0, reason: "канал на паузе (тумблер на /admin)" };
+
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    return { posted: 0, reason: "нет TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID в Convex env" };
+  }
+
+  const next = await ctx.runMutation(internal.tables.data_cooked_instagram_reels.claimNext, {
+    now: Date.now(),
+    channel: "telegram",
+  });
+  if (!next) return { posted: 0, reason: "очередь пуста" };
+
+  try {
+    const fileUrl = next.storageId ? await ctx.storage.getUrl(next.storageId) : next.videoUrl;
+    if (!fileUrl) throw new Error(`источник файла недоступен для ${next._id}`);
+
+    const posted = await sendMedia(token, {
+      chatId,
+      fileUrl,
+      mediaType: next.mediaType ?? "REELS",
+      caption: next.caption,
+    });
+    await ctx.runMutation(internal.tables.data_cooked_instagram_reels.markPosted, {
+      id: next._id,
+      mediaId: posted.messageId,
+      permalink: posted.permalink,
+      postedAt: Date.now(),
+    });
+    return { posted: 1, reason: posted.permalink ?? `сообщение ${posted.messageId}` };
+  } catch (error) {
+    return await noteFailure(ctx, next._id, error);
+  }
+}
+
+/**
+ * Крон-воркер очереди: один тик обслуживает обе двери по очереди, сначала
+ * Instagram, потом Telegram, и публикует не больше одного материала на дверь.
+ * INSTAGRAM_POSTING_ENABLED — общий рубильник публикации (имя историческое):
+ * выключен — молчат обе двери.
+ */
 export const runQueue = internalAction({
   args: {},
   returns: v.object({ posted: v.number(), reason: v.string() }),
@@ -73,60 +193,16 @@ export const runQueue = internalAction({
       return { posted: 0, reason: "INSTAGRAM_POSTING_ENABLED не равен true" };
     }
 
-    const channelOn: boolean = await ctx.runQuery(internal.tables.ops_channel_toggles.isEnabled, {
-      channel: "instagram",
-      defaultEnabled: false,
-    });
-    if (!channelOn) return { posted: 0, reason: "канал instagram на паузе (тумблер на /admin)" };
+    // Отметка «машина жива» ставится один раз на тик, до дверей: сторож
+    // смотрит на прогон очереди, а не на удачу конкретной публикации.
+    await ctx.runMutation(internal.tables.ops_instagram_state.noteRun, { at: Date.now() });
 
-    const state = await ctx.runQuery(internal.tables.ops_instagram_state.get, {});
-    if (!state) return { posted: 0, reason: "нет токена в ops_instagram_state" };
-
-    await ctx.runMutation(internal.tables.ops_instagram_state.noteRun, {
-      account: state.account,
-      at: Date.now(),
-    });
-
-    const limit = await getPublishingLimit(state.accessToken);
-    if (limit && limit.quotaUsage >= limit.quotaTotal) {
-      return { posted: 0, reason: "суточная квота публикаций исчерпана" };
-    }
-
-    const next = await ctx.runMutation(internal.tables.data_cooked_instagram_reels.claimNext, {
-      now: Date.now(),
-      account: state.account,
-    });
-    if (!next) return { posted: 0, reason: "очередь пуста" };
-
-    try {
-      const fileUrl = next.storageId ? await ctx.storage.getUrl(next.storageId) : next.videoUrl;
-      if (!fileUrl) throw new Error(`источник файла недоступен для ${next._id}`);
-
-      const posted = await publishMedia(state.accessToken, {
-        fileUrl,
-        mediaType: next.mediaType ?? "REELS",
-        caption: next.caption,
-        isAiGenerated: true,
-      });
-      await ctx.runMutation(internal.tables.data_cooked_instagram_reels.markPosted, {
-        id: next._id,
-        mediaId: posted.mediaId,
-        permalink: posted.permalink,
-        postedAt: Date.now(),
-      });
-      return { posted: 1, reason: posted.permalink ?? posted.mediaId };
-    } catch (error) {
-      const message = errorMessage(error);
-      const outcome = await ctx.runMutation(
-        internal.tables.data_cooked_instagram_reels.markFailed,
-        { id: next._id, error: message },
-      );
-      const tail =
-        outcome.status === "approved"
-          ? `попытка ${outcome.attempts}, вернул в очередь через два часа`
-          : "третья неудача, материал погашен";
-      return { posted: 0, reason: `ошибка: ${message} (${tail})` };
-    }
+    const instagram = await runInstagramDoor(ctx);
+    const telegram = await runTelegramDoor(ctx);
+    return {
+      posted: instagram.posted + telegram.posted,
+      reason: `instagram: ${instagram.reason} · telegram: ${telegram.reason}`,
+    };
   },
 });
 

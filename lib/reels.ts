@@ -25,10 +25,17 @@ export type AirtimeRow = FunctionReturnType<
   typeof api.tables.data_raw_instagram_media.listAirtimeForAdmin
 >[number];
 
+/** Двери публикации: у каждой свой тумблер, состояние — последнее событие. */
+export const CHANNELS = ["instagram", "telegram"] as const;
+
+export type Channel = (typeof CHANNELS)[number];
+
+export type ChannelState = { action: "on" | "off"; reason: string; createdAt: number } | null;
+
 export type ReelsBoardData = {
   queue: QueueRow[];
   airtime: AirtimeRow[];
-  channel: { action: "on" | "off"; reason: string; createdAt: number } | null;
+  channels: Record<Channel, ChannelState>;
   state: {
     hasToken: boolean;
     account: string;
@@ -59,13 +66,14 @@ export async function loadReelsBoard(): Promise<ReelsBoardData | { reason: strin
       client.query(api.tables.ops_social_snapshots.latest, { token, network: "instagram" }),
       client.query(api.tables.ops_alerts.listForAdmin, { token, limit: 5 }),
     ]);
-    const channel = channels.find((row) => row.channel === "instagram") ?? null;
+    const stateOf = (name: Channel): ChannelState => {
+      const row = channels.find((event) => event.channel === name);
+      return row ? { action: row.action, reason: row.reason, createdAt: row.createdAt } : null;
+    };
     return {
       queue,
       airtime,
-      channel: channel
-        ? { action: channel.action, reason: channel.reason, createdAt: channel.createdAt }
-        : null,
+      channels: { instagram: stateOf("instagram"), telegram: stateOf("telegram") },
       state: {
         hasToken: state.hasToken,
         account: state.account,

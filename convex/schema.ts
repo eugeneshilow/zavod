@@ -7,10 +7,15 @@ import { v } from "convex/values";
 
 export default defineSchema({
   // Очередь публикации: approved -> posting -> posted атомарным claim воркера.
-  // Держит и ролики, и картинки (поле mediaType). Источник файла — публичный
-  // адрес либо хранилище Convex (ровно один из двух, проверяет постановка).
+  // Одна очередь на две двери — Instagram и Telegram (поле channel). Держит и
+  // ролики, и картинки (поле mediaType). Источник файла — публичный адрес либо
+  // хранилище Convex (ровно один из двух, проверяет постановка).
   data_cooked_instagram_reels: defineTable({
     caption: v.string(),
+    // Куда уедет строка: Instagram или Telegram. Поля нет — значит Instagram:
+    // так строки, написанные до второй двери, читаются без миграции. Новые
+    // строки поле пишут всегда, иначе их не видит индекс по каналу.
+    channel: v.optional(v.union(v.literal("instagram"), v.literal("telegram"))),
     // Чем является файл: вертикальный ролик или одиночная картинка.
     // Поля нет — значит ролик: так старые строки читаются без миграции.
     mediaType: v.optional(v.union(v.literal("REELS"), v.literal("IMAGE"))),
@@ -33,7 +38,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     createdAt: v.number(),
   })
-    .index("by_status_scheduled", ["status", "scheduledAt"])
+    .index("by_channel_status_scheduled", ["channel", "status", "scheduledAt"])
     .index("by_created_at", ["createdAt"]),
 
   // Реестр медиа аккаунта: крон открывает его из GET /me/media и ловит в том

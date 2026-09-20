@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { api } from "@/convex/_generated/api";
 import { reelsAccess } from "@/lib/reels";
 
-// Иммунитет рельсы публикации: счётчики очереди, время последнего прогона и
-// включены ли кроны. Секретов не отдаёт. Сторож — .github/workflows/reels-alive.yml.
-// Канон зоны — docs/publish.md.
+// Иммунитет рельсы публикации: счётчики очереди целиком и по дверям, время
+// последнего прогона и включены ли кроны. Секретов не отдаёт. Сторож —
+// .github/workflows/reels-alive.yml: он читает queue.failed, поэтому счётчики
+// всей очереди остаются на верхнем уровне. Канон зоны — docs/publish.md.
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +19,8 @@ export async function GET() {
       token: access.token,
     });
     return NextResponse.json({
-      queue: {
-        approved: health.queue.approved,
-        posting: health.queue.posting,
-        posted: health.queue.posted,
-        failed: health.queue.failed,
-        skipped: health.queue.skipped,
-      },
+      queue: health.queue,
+      byChannel: health.byChannel,
       lastRunAt: health.lastRunAt,
       cronsEnabled: health.cronsEnabled,
     });
