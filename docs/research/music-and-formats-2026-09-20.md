@@ -11,6 +11,7 @@
 Главное изменение против всех гайдов 2023–2025: с мая 2026 у Meta есть **Instagram Audio API**. Раньше музыку надо было вшивать в файл, теперь есть оба пути.
 
 [офиц] «Instagram Audio API», https://developers.facebook.com/docs/instagram-platform/content-publishing/audio-api/ (проверено 2026-09-20), дословно:
+
 > «The Instagram Audio API allows you to retrieve and search for audio — both original sounds from Instagram Reels and music — and attach them to Reels at creation time. This API is available on the Instagram Platform with Facebook Login.»
 
 Механика (там же): поиск — `GET /ig_audio` с `audio_type` (`music` | `original_sound`), `user_id`, необязательным `search_query`; метаданные — `GET /{ig-audio-id}`; публикация — `POST /{ig-user-id}/media` с объектом `audio_configuration` (`audio_id`, `audio_volume` 0–100, `video_volume` 0–100). Пример из доки дословно:
@@ -46,17 +47,18 @@ curl -X POST "https://graph.facebook.com/v22.0/{ig-user-id}/media" \
 
 ### 1в. Легальные источники музыки для вшивания в файл
 
-| источник | что разрешает | цена |
-| --- | --- | --- |
-| **Meta Sound Collection** [офиц] facebook.com/sound/collection/terms | бесплатно, коммерческое и некоммерческое использование, но только внутри продуктов Meta | $0 |
-| **Pixabay** [офиц] pixabay.com/service/license-summary | «Use Content for free», «without having to attribute the author», «Modify or adapt Content into new works»; нельзя «sell or distribute Content… on a Standalone basis» | $0 |
-| **YouTube Audio Library** [офиц] support.google.com/youtube/answer/3376882 | «Music and sound effects from the YouTube Audio Library are copyright-safe»; CC-треки требуют кредита. Разрешения использовать ВНЕ YouTube в справке НЕТ (§5) | $0 |
-| **Mixkit** | бесплатная музыкальная лицензия есть, текст за ссылкой «View License», боту не отдаётся | н/д |
-| **Uppbeat** | free с обязательным кредитом + премиум; и /pricing, и /legal/license вернули 429 | н/д |
-| **Epidemic Sound** [офиц] epidemicsound.com/pricing | «all of the music and sound effects in our catalog are royalty-free… you pay only your monthly subscription price for unlimited usage»; реклама — только Pro/Enterprise | [пресса] Personal ≈$9/мес (≈$6/мес годовой), Commercial ≈$25/мес годовой — обзоры расходятся |
-| **Artlist** | страница подписок — 403, условия не подтверждены | н/д |
+| источник                                                                   | что разрешает                                                                                                                                                           | цена                                                                                         |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Meta Sound Collection** [офиц] facebook.com/sound/collection/terms       | бесплатно, коммерческое и некоммерческое использование, но только внутри продуктов Meta                                                                                 | $0                                                                                           |
+| **Pixabay** [офиц] pixabay.com/service/license-summary                     | «Use Content for free», «without having to attribute the author», «Modify or adapt Content into new works»; нельзя «sell or distribute Content… on a Standalone basis»  | $0                                                                                           |
+| **YouTube Audio Library** [офиц] support.google.com/youtube/answer/3376882 | «Music and sound effects from the YouTube Audio Library are copyright-safe»; CC-треки требуют кредита. Разрешения использовать ВНЕ YouTube в справке НЕТ (§5)           | $0                                                                                           |
+| **Mixkit**                                                                 | бесплатная музыкальная лицензия есть, текст за ссылкой «View License», боту не отдаётся                                                                                 | н/д                                                                                          |
+| **Uppbeat**                                                                | free с обязательным кредитом + премиум; и /pricing, и /legal/license вернули 429                                                                                        | н/д                                                                                          |
+| **Epidemic Sound** [офиц] epidemicsound.com/pricing                        | «all of the music and sound effects in our catalog are royalty-free… you pay only your monthly subscription price for unlimited usage»; реклама — только Pro/Enterprise | [пресса] Personal ≈$9/мес (≈$6/мес годовой), Commercial ≈$25/мес годовой — обзоры расходятся |
+| **Artlist**                                                                | страница подписок — 403, условия не подтверждены                                                                                                                        | н/д                                                                                          |
 
 Генерация музыки (ИИ):
+
 - **Suno** [офиц] suno.com/pricing (2026-09-20): Free $0, **Pro $8/мес ($64/год)**, **Premier $24/мес ($192/год)**; «Commercial use rights» только на Pro и Premier с припиской «See the terms of service for limitations on commercial use». [практики] обзоры называют $10/$30 — расхождение не разрешено (§5). Из справки Suno: права закрепляются за тем, у кого была подписка **в момент создания** трека, и сохраняются после отмены; ремиксы — только личное некоммерческое.
 - **ElevenLabs Music** [офиц] elevenlabs.io/music (2026-09-20), дословно: «The tracks you generate are cleared for broad commercial use. Commercial rights vary by subscription tier»; на self-serve тарифах «online and offline commercial use is permitted, except for film, TV, and Studio Games»; free — «Personal use only». Отдельные Music Terms: elevenlabs.io/eleven-music-model-specific-terms.
 - **Udio** — для нашей машины не годится. [пресса] Billboard и Music Business Worldwide (окт–ноя 2025): UMG урегулировала иск, свободную выгрузку закрыли, дали 48-часовое окно скачать старое (с 3 ноября 2025), новая платформа 2026 года — «walled garden» без свободного экспорта.
@@ -67,6 +69,7 @@ curl -X POST "https://graph.facebook.com/v22.0/{ig-user-id}/media" \
 ### 1г. Практика faceless-каналов: трендовый звук vs вшитый
 
 Исследований с числами именно по этой развилке **не найдено** (§5). Что есть с провенансом:
+
 - [офиц, косвенно] Adam Mosseri, январь 2025: главные сигналы ранжирования Reels — watch time, likes per reach, sends per reach; «sends» весят больше для показа не подписчикам. Трендовое аудио в официальных сигналах не названо. Первоисточник — сторис/видео Mosseri; страницы Meta с этим перечнем не нашёл (§5).
 - [данные вендора] Metricool, Instagram Study 2026, https://metricool.com/press-release-instagram-study-2026/ (2026-06-16, проверено 2026-09-20), выборка 24 364 803 поста с 375 118 аккаунтов, янв–фев 2025 против янв–фев 2026: Reels дают >4× взаимодействий против одиночной картинки; средняя досматриваемость Reels выросла до 8,5 секунды (более чем вдвое год к году); карусели — 9× сохранений против картинки; посты с хештегами получают −31,7 % просмотров и −33,89 % взаимодействий к среднему; CTA на комментарий — +202,78 % комментариев; выросли только 21 % аккаунтов до 10 тыс. подписчиков.
 
@@ -79,6 +82,7 @@ curl -X POST "https://graph.facebook.com/v22.0/{ig-user-id}/media" \
 Честный статус: **кейсов конкретных аккаунтов ниши «ИИ/софт/no-code» с охватами и датами не найдено** — выдача забита SEO-листиклами сервисов faceless-генерации (§5). Есть только отраслевые замеры по большим выборкам.
 
 [данные вендора] Socialinsider, «Instagram Reels Performance Statistics For 2026», https://www.socialinsider.io/blog/instagram-reels-statistics/ (обновлено 2026-06-24, проверено 2026-09-20), выборка 140 тыс. Reels бизнес-страниц, январь–июнь 2026:
+
 - reach rate у аккаунтов 1–5 тыс. подписчиков: Reels **9,78 %**, карусели **8,80 %**, картинки **7,00 %**;
 - длина: 30–60 с — «the highest reach rate, of 5.60% on average»; <30 с — 5,20 %; 60–90 с — 5,30 %; >120 с — 3,50 %;
 - skip rate: 65,50 % у аккаунтов 1–5 тыс., 60,50 % у 100 тыс.–1 млн;
