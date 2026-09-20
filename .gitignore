@@ -15,6 +15,8 @@
 
 # next.js
 /.next/
+
+# готовые ролики и кадры (docs/reels.md); next export кладёт сюда же
 /out/
 
 # production

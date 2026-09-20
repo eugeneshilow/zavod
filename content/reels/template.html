@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  /* Лекало слайда 1080x1920 (9:16). Одна тема — один цвет фона на серию. Текст — часть картинки. */
+  html,body{margin:0;width:1080px;height:1920px;overflow:hidden;font-family:Inter,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .slide{position:relative;width:1080px;height:1920px;background:var(--bg,#F3EEE4);color:var(--ink,#111)}
+  .safe{position:absolute;left:96px;right:96px;top:220px;bottom:300px;display:flex;flex-direction:column;justify-content:center;gap:40px}
+  .kicker{font-size:36px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);opacity:.55;font-weight:600}
+  .num{font-size:220px;line-height:.9;font-weight:800;letter-spacing:-.04em;color:var(--accent,#D9482B)}
+  h1{font-size:112px;line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:0}
+  p{font-size:54px;line-height:1.28;margin:0;max-width:880px;font-weight:400;color:var(--ink);opacity:.9}
+  .foot{position:absolute;left:96px;right:96px;bottom:160px;display:flex;justify-content:space-between;align-items:baseline;font-size:34px;letter-spacing:.06em;opacity:.6}
+  .dots{display:flex;gap:14px}.dots i{width:18px;height:18px;border-radius:50%;background:var(--ink);opacity:.25;display:block}.dots i.on{opacity:1}
+  .cover h1{font-size:132px}
+</style>
+<!-- data-slide: index; заполняется рендером; цвета серии: --bg --ink --accent -->
+<div class="slide" style="--bg:#F3EEE4;--ink:#141414;--accent:#D9482B">
+  <div class="safe">
+    <div class="kicker">words your coding agent uses</div>
+    <div class="num">01</div>
+    <h1>Project folder</h1>
+    <p>The only folder you open. The agent keeps two things inside: the repository and its work desks.</p>
+  </div>
+  <div class="foot"><span>vibecoding.tech</span><div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+</div>
