@@ -3,7 +3,7 @@ import "./globals.css";
 import { ConvexClientProvider } from "@/components/convex-provider";
 
 export const metadata: Metadata = {
-  title: "zavod-v6",
+  title: "zavod",
   description: "Проект, собранный как Spec-Driven Company",
 };
 
