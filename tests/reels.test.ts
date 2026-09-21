@@ -121,7 +121,7 @@ describe("история", () => {
   it("разбирает файл истории и голос", () => {
     const parsed = parseStory(story);
     expect(parsed.id).toBe("robot-knife");
-    expect(parsed.voice.engine).toBe("yandex");
+    expect(parsed.voice.engine).toBe("eleven");
     expect(parsed.speed).toBeGreaterThan(0);
     expect(parsed.beats).toHaveLength(story.beats.length);
     expect(parseVoice("say:Milena")).toEqual({
@@ -142,13 +142,13 @@ describe("история", () => {
   });
 
   it("третий голос — ElevenLabs: v3 по умолчанию, v2 по просьбе", () => {
-    expect(parseVoice("eleven:onwK4e9ZLuTAKqWW03F9")).toEqual({
+    expect(parseVoice("eleven:ogi2DyUAKJb7CEdqqvlU")).toEqual({
       engine: "eleven",
-      name: "onwK4e9ZLuTAKqWW03F9",
+      name: "ogi2DyUAKJb7CEdqqvlU",
       role: null,
       model: STORY.eleven.model,
     });
-    expect(parseVoice("eleven:onwK4e9ZLuTAKqWW03F9:v2").model).toBe(STORY.eleven.modelV2);
+    expect(parseVoice("eleven:ogi2DyUAKJb7CEdqqvlU:v2").model).toBe(STORY.eleven.modelV2);
     expect(STORY.eleven.model).toBe("eleven_v3");
     expect(STORY.eleven.modelV2).toBe("eleven_multilingual_v2");
     expect(() => parseVoice("eleven:bob:good")).toThrow(/v2/);

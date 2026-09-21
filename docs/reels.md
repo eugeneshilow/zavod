@@ -111,6 +111,22 @@ bad","meta":"7,4 млн просмотров · 19.09.2026"}` — карточк
 `content/reels/media/LICENSES.md`: `файл · источник (URL) · лицензия · дата`.
 Файл без строки в ролик не идёт.
 
+### Голоса канала
+
+Два голоса ElevenLabs, оба на модели v3, оба из библиотеки — на них нужен план
+Starter и выше:
+
+| id                     | голос                                 | где                     |
+| ---------------------- | ------------------------------------- | ----------------------- |
+| `ogi2DyUAKJb7CEdqqvlU` | Stanislav — Deep, Empathetic and Warm | основной голос историй  |
+| `6A9D8WSMm4rFsg2DWFeE` | Egor Gadzhiyev — Clear and Commanding | второй голос, для пробы |
+
+В файле истории это строка `"voice": "eleven:ogi2DyUAKJb7CEdqqvlU"`, а послушать
+второй на том же тексте можно флагом, не трогая файл:
+`--voice eleven:6A9D8WSMm4rFsg2DWFeE`. Встроенные голоса ElevenLabs
+(`category: premade`) работают на любом тарифе и годятся как черновик, но они
+все англоязычные.
+
 ### Разметка для голоса
 
 Голосу уходит не тот текст, что зрителю. Зритель всегда видит `text`,
@@ -213,7 +229,7 @@ node scripts/reels/render-slides.mjs content/reels/series/<id>.json --music asse
 node scripts/reels/render-poster.mjs <картинка.png> --line "текст"
 node scripts/reels/render-story.mjs content/reels/stories/<id>.json
 node scripts/reels/render-story.mjs content/reels/stories/<id>.json --voice yandex:filipp
-node scripts/reels/render-story.mjs content/reels/stories/<id>.json --voice eleven:onwK4e9ZLuTAKqWW03F9
+node scripts/reels/render-story.mjs content/reels/stories/<id>.json --voice eleven:6A9D8WSMm4rFsg2DWFeE
 ```
 
 Флаги всех трёх рендеров: `--music <путь>` — трек; `--out <путь>` — куда
