@@ -127,6 +127,10 @@ export default defineSchema({
     takenAt: v.optional(v.number()),
     doneAt: v.optional(v.number()),
     storyId: v.optional(v.string()),
+    // Сама история JSON-текстом: что раннер написал по этой идее. Лежит в
+    // строке, чтобы по готовому ролику можно было найти его сценарий; наружу
+    // список идей её не отдаёт — она длинная, а экрану нужен только статус.
+    story: v.optional(v.string()),
     note: v.optional(v.string()),
     permalink: v.optional(v.string()),
   })
