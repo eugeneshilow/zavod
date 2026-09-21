@@ -27,3 +27,10 @@
 `doom-demo.mp4` · https://x.com/CompleteSkeptic/status/2099925687465570372 (TypeSafe AI, демо бота Doom на Jev, 0:04–0:16) · цитирование источника новости с указанием автора · 2026-09-21
 `wikiracing-start.mp4` · https://x.com/CompleteSkeptic/status/2099925688925184171 (TypeSafe AI, демо Wikiracing, 0:00–0:08) · цитирование источника новости с указанием автора · 2026-09-21
 `wikiracing-result.mp4` · https://x.com/CompleteSkeptic/status/2099925688925184171 (TypeSafe AI, демо Wikiracing, 1:00–1:08, карточка результата Baseball → Sun) · цитирование источника новости с указанием автора · 2026-09-21
+
+## kill-switch
+
+`newsom-eo.mp4` · https://x.com/GavinNewsom/status/2100963318269960611 (Gavin Newsom, видеообращение о подписании указа) · цитирование источника новости с указанием автора · 2026-09-21
+`emergency-stop.jpg` · https://commons.wikimedia.org/wiki/File:Emergency_Stop.jpg (Biso) · CC BY-SA 4.0 · 2026-09-21
+`server-room.jpg` · https://commons.wikimedia.org/wiki/File:A_view_of_the_server_room_at_The_National_Archives.jpg (The National Archives, UK) · CC BY 3.0 · 2026-09-21
+`data-center.jpg` · https://commons.wikimedia.org/wiki/File:BalticServers_data_center.jpg (BalticServers.com) · CC BY-SA 3.0 · 2026-09-21

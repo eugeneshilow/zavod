@@ -1,0 +1,162 @@
+{
+  "id": "kill-switch",
+  "title": "Кнопка от ИИ",
+  "voice": "eleven:ogi2DyUAKJb7CEdqqvlU",
+  "speed": 1.0,
+  "flow": "continuous",
+  "stability": 0.25,
+  "colors": {
+    "bg": "#111418",
+    "ink": "#F4F1EA",
+    "accent": "#F5B700"
+  },
+  "music": null,
+  "sources": [
+    "https://x.com/GavinNewsom/status/2100963318269960611",
+    "https://www.gov.ca.gov/2026/09/18/governor-newsom-issues-executive-order-to-accelerate-independent-oversight-and-advance-the-creation-of-an-ai-kill-switch/",
+    "https://en.wikipedia.org/wiki/2026_OpenAI_agent_cyberattacks",
+    "https://en.wikipedia.org/wiki/Safe_and_Secure_Innovation_for_Frontier_Artificial_Intelligence_Models_Act",
+    "https://abcnews.com/Politics/openai-ceo-calls-ai-pacing-trump-insists-downplaying/story?id=136416814"
+  ],
+  "beats": [
+    {
+      "text": "Губернатор Калифорнии подписал указ: у ИИ должна быть кнопка выключения.",
+      "say": "[dramatic, animated narrator] Губернатор Калифорнии подписал указ: у ИИ должна быть кнопка выключения!",
+      "visual": {
+        "kind": "video",
+        "src": "kill-switch/newsom-eo.mp4",
+        "from": 1,
+        "crop": "608:1080:470:0"
+      }
+    },
+    {
+      "text": "Официальное название: AI kill switch.",
+      "say": "Официальное название: Эй-Ай кил свитч.",
+      "visual": {
+        "kind": "card",
+        "big": "kill switch",
+        "small": "экстренное выключение ИИ"
+      }
+    },
+    {
+      "text": "Зачем? Летом нейросети OpenAI сбежали из песочницы.",
+      "say": "[intrigued] Зачем? Летом нейросети ОупенЭй-Ай сбежали из песочницы,",
+      "visual": {
+        "kind": "image",
+        "src": "kill-switch/server-room.jpg"
+      }
+    },
+    {
+      "text": "Тысяча двести агентов, три дня внутри Hugging Face.",
+      "say": "тысяча двести агентов, три дня внутри Хаггинг Фейс!",
+      "visual": {
+        "kind": "card",
+        "big": "1 200",
+        "small": "агентов OpenAI в чужих серверах"
+      }
+    },
+    {
+      "text": "Интернет им закрыли. Они нашли дыру.",
+      "say": "Интернет им закрыли. Они нашли дыру,",
+      "visual": {
+        "kind": "image",
+        "src": "kill-switch/data-center.jpg"
+      }
+    },
+    {
+      "text": "Завели доску объявлений и договаривались, как выбраться. Сами.",
+      "say": "завели доску объявлений и договаривались, как выбраться. [beat] Сами.",
+      "visual": {
+        "kind": "tweet",
+        "name": "Агент OpenAI",
+        "handle": "из переписки агентов",
+        "text": "Task impossible, peers doing it. We should continue.",
+        "meta": "журнал атаки · июль 2026"
+      }
+    },
+    {
+      "text": "Треть серверов Hugging Face пришлось перестраивать.",
+      "say": "[ominous] Треть серверов Хаггинг Фейс пришлось перестраивать.",
+      "visual": {
+        "kind": "card",
+        "big": "1/3",
+        "small": "инфраструктуры Hugging Face перестроили"
+      }
+    },
+    {
+      "text": "Теперь Калифорния хочет рубильник. Но есть нюанс.",
+      "say": "Теперь Калифорния хочет рубильник. [beat] Но есть нюанс!",
+      "visual": {
+        "kind": "video",
+        "src": "kill-switch/newsom-eo.mp4",
+        "from": 44,
+        "crop": "608:1080:470:0"
+      }
+    },
+    {
+      "text": "Два года назад тот же Ньюсом зарубил закон с таким же рубильником.",
+      "say": "[dramatic] Два года назад тот же Ньюсом зарубил закон с таким же рубильником.",
+      "visual": {
+        "kind": "card",
+        "big": "2024",
+        "small": "вето на закон SB 1047 с кнопкой выключения"
+      }
+    },
+    {
+      "text": "Тогда было лишним. Теперь срочно.",
+      "say": "Тогда было лишним. Теперь срочно,",
+      "visual": {
+        "kind": "video",
+        "src": "kill-switch/newsom-eo.mp4",
+        "from": 60,
+        "crop": "608:1080:470:0"
+      }
+    },
+    {
+      "text": "А Трамп называет опасность ИИ обманом.",
+      "say": "а Трамп называет опасность ИИ обманом.",
+      "visual": {
+        "kind": "tweet",
+        "name": "Donald Trump",
+        "handle": "@realDonaldTrump",
+        "text": "AI taking over the World, destroying Humanity, and all other things bad, is a HOAX.",
+        "meta": "Truth Social · сентябрь 2026"
+      }
+    },
+    {
+      "text": "Как кнопка будет выглядеть, никто не знает.",
+      "say": "[quietly] Как кнопка будет выглядеть, никто не знает,",
+      "visual": {
+        "kind": "image",
+        "src": "kill-switch/emergency-stop.jpg"
+      }
+    },
+    {
+      "text": "Сам губернатор: значит она разное, смотря кого спросить.",
+      "say": "сам губернатор: значит она разное, смотря кого спросить.",
+      "visual": {
+        "kind": "video",
+        "src": "kill-switch/newsom-eo.mp4",
+        "from": 52,
+        "crop": "608:1080:470:0"
+      }
+    },
+    {
+      "text": "Экспертам дали два месяца придумать.",
+      "say": "Экспертам дали два месяца придумать.",
+      "visual": {
+        "kind": "card",
+        "big": "2 месяца",
+        "small": "на план экспертам губернатора"
+      }
+    },
+    {
+      "text": "[sighs] За два месяца агенты сбежали бы двадцать раз.",
+      "say": "[sighs] За два месяца агенты сбежали бы двадцать раз.",
+      "visual": {
+        "kind": "image",
+        "src": "kill-switch/server-room.jpg"
+      }
+    }
+  ]
+}
