@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { setChannelState } from "@/app/admin/actions";
 import { renderDoc, resolveDoc, stripTitle } from "@/lib/docs";
 import { moscow, num, type Channel } from "@/lib/reels";
@@ -43,16 +44,21 @@ function Actions({ n, channel }: { n: NetworkGlance; channel: Channel }) {
       <form action={runQueueNow}>
         <input type="hidden" name="network" value={n.id} />
         <button type="submit" className={button}>
-          Прогнать очередь сейчас
+          Опубликовать следующий сейчас
         </button>
       </form>
       {n.id === "instagram" ? (
-        <form action={collectMetricsNow}>
-          <input type="hidden" name="network" value={n.id} />
-          <button type="submit" className={button}>
-            Снять цифры сейчас
-          </button>
-        </form>
+        <>
+          <form action={collectMetricsNow}>
+            <input type="hidden" name="network" value={n.id} />
+            <button type="submit" className={button}>
+              Снять цифры сейчас
+            </button>
+          </form>
+          <Link prefetch={false} href="/admin/publish#canon" className={button}>
+            Подключить второй аккаунт
+          </Link>
+        </>
       ) : null}
     </div>
   );
