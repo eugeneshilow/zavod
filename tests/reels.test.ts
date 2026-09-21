@@ -18,15 +18,20 @@ import {
   layoutBeats,
   chunkText,
   cleanText,
+  elevenTempo,
   letterDurations,
   parseStory,
   parseVoice,
   splitWords,
   storyAudioFilter,
   storyTotal,
+  toElevenMarkup,
   trustHeard,
+  voiceCacheParts,
+  voiceTextFor,
   wordDrift,
 } from "@/scripts/reels/story.mjs";
+import { elevenError } from "@/scripts/reels/render-story.mjs";
 
 const template = readFileSync("content/reels/template.html", "utf8");
 const words = JSON.parse(readFileSync("content/reels/series/01-words-agent-uses.json", "utf8"));
@@ -119,15 +124,35 @@ describe("история", () => {
     expect(parsed.voice.engine).toBe("yandex");
     expect(parsed.speed).toBeGreaterThan(0);
     expect(parsed.beats).toHaveLength(story.beats.length);
-    expect(parseVoice("say:Milena")).toEqual({ engine: "say", name: "Milena", role: null });
+    expect(parseVoice("say:Milena")).toEqual({
+      engine: "say",
+      name: "Milena",
+      role: null,
+      model: null,
+    });
     expect(parseVoice("yandex:alexander:good")).toEqual({
       engine: "yandex",
       name: "alexander",
       role: "good",
+      model: null,
     });
     expect(() => parseVoice("elevenlabs:bob")).toThrow(/say/);
     expect(() => parseVoice("say:Milena:good")).toThrow(/амплуа/);
     expect(() => parseStory({ ...story, beats: [] })).toThrow(/beats/);
+  });
+
+  it("третий голос — ElevenLabs: v3 по умолчанию, v2 по просьбе", () => {
+    expect(parseVoice("eleven:onwK4e9ZLuTAKqWW03F9")).toEqual({
+      engine: "eleven",
+      name: "onwK4e9ZLuTAKqWW03F9",
+      role: null,
+      model: STORY.eleven.model,
+    });
+    expect(parseVoice("eleven:onwK4e9ZLuTAKqWW03F9:v2").model).toBe(STORY.eleven.modelV2);
+    expect(STORY.eleven.model).toBe("eleven_v3");
+    expect(STORY.eleven.modelV2).toBe("eleven_multilingual_v2");
+    expect(() => parseVoice("eleven:bob:good")).toThrow(/v2/);
+    expect(() => parseVoice("eleven:")).toThrow(/не назван/);
   });
 
   it("каждый кадр историй — один из четырёх видов", () => {
@@ -152,6 +177,91 @@ describe("разметка голоса", () => {
     expect(ass).not.toContain("sil<[");
     expect(ass).not.toContain("**");
     expect(ass).toContain("куклу.");
+  });
+
+  it("аудио-теги и многоточия тоже не доходят до зрителя", () => {
+    const raw = "[calm, unhurried narrator] Роботу дали нож... [sighs] И он ударил.";
+    expect(cleanText(raw)).toBe("Роботу дали нож. И он ударил.");
+    expect(splitWords(raw)).toEqual(["Роботу", "дали", "нож.", "И", "он", "ударил."]);
+    const layout = layoutBeats(
+      [{ text: raw, visual: { kind: "card" } }],
+      [],
+      [{ start: 0, end: 3 }],
+    );
+    const ass = buildAss(layout, storyTotal(layout));
+    expect(ass).not.toContain("[calm");
+    expect(ass).not.toContain("[sighs]");
+    expect(ass).not.toContain("...");
+  });
+});
+
+describe("разметка для ElevenLabs", () => {
+  it("разметка Яндекса переводится: паузы в многоточия, ударения в слова", () => {
+    const raw = "sil<[300]> Это не хоррор. Это **тест**.";
+    expect(toElevenMarkup(raw)).toBe("... Это не хоррор. Это тест.");
+    expect(toElevenMarkup("Ударить **куклу**. sil<[500]> Ножом.")).toBe(
+      "Ударить куклу. ... Ножом.",
+    );
+  });
+
+  it("теги остаются голосу ElevenLabs и вырезаются у SpeechKit", () => {
+    const beat = { text: "[thoughtful] Робот ударил sil<[300]> куклу.", say: null };
+    expect(voiceTextFor("eleven", beat)).toBe("[thoughtful] Робот ударил ... куклу.");
+    expect(voiceTextFor("yandex", beat)).toBe("Робот ударил sil<[300]> куклу.");
+    expect(voiceTextFor("say", beat)).toBe("Робот ударил sil<[300]> куклу.");
+  });
+
+  it("say уходит голосу, а text остаётся на экране", () => {
+    const beat = {
+      text: "GPT-6 Astra выполнила **97** команд.",
+      say: "[thoughtful] Джи-пи-ти шесть Астра выполнила девяносто семь команд.",
+    };
+    expect(voiceTextFor("eleven", beat)).toContain("девяносто семь");
+    expect(voiceTextFor("eleven", beat)).not.toContain("97");
+    expect(cleanText(beat.text)).toBe("GPT-6 Astra выполнила 97 команд.");
+    expect(splitWords(beat.text)).toContain("97");
+    // У SpeechKit своя разметка: say она не читает, ей остаётся text.
+    expect(voiceTextFor("yandex", beat)).toBe(beat.text);
+  });
+
+  it("ключ кеша звука помнит модель, stability и скорость", () => {
+    const beat = { text: "Робот ударил куклу.", say: null };
+    const v3 = { voice: parseVoice("eleven:abc"), speed: 1.0 };
+    const v2 = { voice: parseVoice("eleven:abc:v2"), speed: 1.0 };
+    const parts = voiceCacheParts(v3, beat);
+    expect(parts).toContain(STORY.eleven.model);
+    expect(parts).toContain(STORY.eleven.stability);
+    expect(parts).toContain(1.0);
+    // Другая модель, другая скорость, другой текст для голоса — другой ключ.
+    expect(voiceCacheParts(v2, beat)).not.toEqual(parts);
+    expect(voiceCacheParts({ ...v3, speed: 1.1 }, beat)).not.toEqual(parts);
+    expect(voiceCacheParts(v3, { ...beat, say: "Робот ударил кук+лу." })).not.toEqual(parts);
+    // У SpeechKit stability не бывает: в ключ идёт пустое место, не число.
+    expect(voiceCacheParts({ voice: parseVoice("yandex:ermil:good"), speed: 1.25 }, beat)).toEqual([
+      "Робот ударил куклу.",
+      "yandex",
+      "ermil",
+      "good",
+      null,
+      null,
+      1.25,
+    ]);
+  });
+
+  it("скорость у v3 подрезается до краёв: высоту голоса не трогаем", () => {
+    expect(elevenTempo(1.0)).toBe(1);
+    expect(elevenTempo(1.25)).toBe(STORY.eleven.tempoMax);
+    expect(elevenTempo(0.5)).toBe(STORY.eleven.tempoMin);
+    expect(STORY.eleven.tempoMin).toBe(0.85);
+    expect(STORY.eleven.tempoMax).toBe(1.15);
+  });
+
+  it("отказ по тарифу объясняется словами, а не кодом", () => {
+    const paid = elevenError(402, '{"detail":{"status":"paid_plan_required"}}');
+    expect(paid).toContain("Starter");
+    expect(paid).not.toContain("402");
+    expect(elevenError(401, "unauthorized")).toContain("ELEVENLABS_API_KEY");
+    expect(elevenError(429, "slow down")).toContain("Подожди");
   });
 });
 
