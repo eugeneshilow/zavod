@@ -125,6 +125,7 @@ export function parseRecipe(md: string, recipeDoc: string): RecipeRow[] {
   return rows;
 }
 
+/** Значение паспорта без бэктиков: на стекле путь читается словами, не кодом. */
 function stripCode(value: string | undefined): string | null {
   return value ? value.replace(/`/g, "").trim() : null;
 }
@@ -149,13 +150,13 @@ export async function loadBrain(id: string): Promise<Brain | null> {
     id,
     name: nameOf(readme, id),
     family: passport["семья"] ?? "без семьи",
-    version: passport["версия"] ?? null,
-    input: passport["вход"] ?? null,
-    output: passport["выход"] ?? null,
-    channel: passport["канал"] ?? null,
-    model: passport["модель"] ?? null,
+    version: stripCode(passport["версия"]),
+    input: stripCode(passport["вход"]),
+    output: stripCode(passport["выход"]),
+    channel: stripCode(passport["канал"]),
+    model: stripCode(passport["модель"]),
     runsDir: stripCode(passport["след прогона"]),
-    note: passport["примечание"] ?? null,
+    note: stripCode(passport["примечание"]),
     doc,
     recipeDoc,
     recipe: parseRecipe(recipe, recipeDoc),
