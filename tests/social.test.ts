@@ -1,6 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { dayGrid, dayKey, postsByDay } from "@/lib/social";
+import { findMissing } from "@/convex/lib/instagram_media";
+import {
+  dayGrid,
+  dayKey,
+  ideaStatusWord,
+  postsByDay,
+  splitAirtime,
+  toReel,
+  type Reel,
+} from "@/lib/social";
 import SocialPage from "@/app/admin/social/page";
 import NetworkPage from "@/app/admin/social/[network]/page";
 
@@ -64,6 +73,69 @@ describe("эфир по дням", () => {
     expect(ig.find((c) => c.key === dayKey(now + DAY))?.planned).toBe(1);
     const tg = postsByDay(rows, "telegram", now);
     expect(tg.reduce((s, c) => s + c.posted + c.planned, 0)).toBe(1);
+  });
+});
+
+describe("удалённые ролики", () => {
+  const registry = [
+    { id: "a", mediaId: "1" },
+    { id: "b", mediaId: "2" },
+    { id: "c", mediaId: "3", missingSince: now - DAY },
+  ];
+
+  it("помечает тех, кого площадка больше не отдаёт", () => {
+    expect(findMissing(registry, new Set(["1"]))).toEqual(["b"]);
+  });
+
+  it("уже помеченных не трогает", () => {
+    expect(findMissing(registry, new Set(["1", "2"]))).toEqual([]);
+  });
+
+  it("пустой ответ площадки не помечает никого", () => {
+    expect(findMissing(registry, new Set<string>())).toEqual([]);
+  });
+});
+
+describe("эфир сети: живые и удалённые", () => {
+  const row = (over: Partial<Reel>): Reel =>
+    toReel({
+      mediaId: over.mediaId ?? "x",
+      account: "ruvibecoding",
+      postedAt: over.postedAt ?? now - DAY,
+      missingSince: over.missingSince ?? null,
+      metrics: { views: over.views ?? 0, reach: 100, totalInteractions: 10 },
+    });
+
+  const rows = [
+    row({ mediaId: "live-small", views: 10 }),
+    row({ mediaId: "live-big", views: 500 }),
+    row({ mediaId: "gone", views: 9000, missingSince: now - 2 * DAY }),
+    row({ mediaId: "old", views: 7, postedAt: now - 30 * DAY }),
+  ];
+
+  it("живые по просмотрам вниз, удалённые отдельным хвостом", () => {
+    const air = splitAirtime(rows, now);
+    expect(air.reels.map((r) => r.mediaId)).toEqual(["live-big", "live-small", "old"]);
+    expect(air.deleted.map((r) => r.mediaId)).toEqual(["gone"]);
+  });
+
+  it("просмотры за семь дней и лучший ролик удалённых не считают", () => {
+    const air = splitAirtime(rows, now);
+    expect(air.views7d).toBe(510);
+    expect(air.top?.mediaId).toBe("live-big");
+  });
+});
+
+describe("статус идеи словом", () => {
+  it("по статусу строки лотка", () => {
+    expect(ideaStatusWord({ status: "new", takenAt: null, note: null })).toBe("ждёт раннер");
+    expect(ideaStatusWord({ status: "taken", takenAt: now, note: "mac" })).toMatch(
+      /^в работе с \d{2}:\d{2}$/,
+    );
+    expect(ideaStatusWord({ status: "done", takenAt: now, note: null })).toBe("готово");
+    expect(ideaStatusWord({ status: "failed", takenAt: now, note: "рендер упал" })).toBe(
+      "не вышло: рендер упал",
+    );
   });
 });
 

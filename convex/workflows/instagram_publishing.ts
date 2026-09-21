@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, type ActionCtx } from "../_generated/server";
+import { findMissing } from "../lib/instagram_media";
 import { stateForAccount } from "../services/reels_queue";
 import { sendMedia } from "../services/telegram";
 import {
@@ -9,9 +10,9 @@ import {
   exchangeForLongLivedToken,
   getFollowersCount,
   getMediaInsights,
+  getAllMedia,
   getMe,
   getPublishingLimit,
-  getRecentMedia,
   isPermissionError,
   oauthExchangePlan,
   publishMedia,
@@ -334,7 +335,7 @@ type IgState = {
   refreshedAt: number;
 };
 
-type MetricsPass = { mediaSeen: number; snapshots: number; skipped: string[] };
+type MetricsPass = { mediaSeen: number; snapshots: number; missing: number; skipped: string[] };
 
 /**
  * Крон: обходит все аккаунты (или один, если имя передали) и по каждому
@@ -345,6 +346,7 @@ export const collectMetrics = internalAction({
   returns: v.object({
     mediaSeen: v.number(),
     snapshots: v.number(),
+    missing: v.number(),
     skipped: v.array(v.string()),
   }),
   handler: async (ctx, args): Promise<MetricsPass> => {
@@ -355,14 +357,15 @@ export const collectMetrics = internalAction({
             .runQuery(internal.tables.ops_instagram_state.get, { account: args.account })
             .then((state) => (state ? [state] : []));
     if (states.length === 0) {
-      return { mediaSeen: 0, snapshots: 0, skipped: ["no_token"] };
+      return { mediaSeen: 0, snapshots: 0, missing: 0, skipped: ["no_token"] };
     }
 
-    const total: MetricsPass = { mediaSeen: 0, snapshots: 0, skipped: [] };
+    const total: MetricsPass = { mediaSeen: 0, snapshots: 0, missing: 0, skipped: [] };
     for (const state of states) {
       const pass = await collectForAccount(ctx, state);
       total.mediaSeen += pass.mediaSeen;
       total.snapshots += pass.snapshots;
+      total.missing += pass.missing;
       total.skipped.push(...pass.skipped.map((line) => `${state.account}/${line}`));
     }
     return total;
@@ -373,15 +376,39 @@ export const collectMetrics = internalAction({
 async function collectForAccount(ctx: ActionCtx, state: IgState): Promise<MetricsPass> {
   let mediaSeen = 0;
   let snapshots = 0;
+  let missing = 0;
   const skipped: string[] = [];
 
   try {
-    const recent = await getRecentMedia(state.accessToken, { limit: 25 });
-    mediaSeen = recent.length;
-    for (const media of recent) {
+    // Полный список эфира, а не последние 25: по нему видно и новое, и то, что
+    // с площадки пропало. Удалённое помечаем, но не стираем — docs/social/instagram.md.
+    const live = await getAllMedia(state.accessToken, { max: 200 });
+    mediaSeen = live.length;
+    for (const media of live) {
       await ctx.runMutation(internal.tables.data_raw_instagram_media.upsertFromApi, {
         account: state.account,
         ...media,
+      });
+    }
+
+    const registry = await ctx.runQuery(
+      internal.tables.data_raw_instagram_media.listAccountRegistry,
+      { account: state.account },
+    );
+    const apiIds = new Set(live.map((media) => media.id));
+    const gone = findMissing(registry, apiIds);
+    if (live.length === 0 && registry.length > 0) {
+      // Пустой ответ при непустом реестре — это похоже на сбой площадки, а не
+      // на удаление всего эфира: никого не помечаем и говорим об этом вслух.
+      skipped.push("pass: площадка вернула пустой список медиа — пометка удалённых пропущена");
+      await ctx.runMutation(internal.tables.ops_alerts.record, {
+        kind: "instagram_metrics_failed",
+        message: `Instagram вернул пустой список медиа для «${state.account}» при непустом реестре: пометка удалённых пропущена`,
+      });
+    } else if (gone.length > 0) {
+      missing = await ctx.runMutation(internal.tables.data_raw_instagram_media.markMissing, {
+        ids: gone as Id<"data_raw_instagram_media">[],
+        at: Date.now(),
       });
     }
 
@@ -454,5 +481,5 @@ async function collectForAccount(ctx: ActionCtx, state: IgState): Promise<Metric
     });
   }
 
-  return { mediaSeen, snapshots, skipped };
+  return { mediaSeen, snapshots, missing, skipped };
 }
