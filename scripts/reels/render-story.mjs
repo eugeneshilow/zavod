@@ -13,6 +13,7 @@ import { chromium } from "playwright";
 import { FPS, encodeArgs, parseFlags, probe, run } from "./lib.mjs";
 import {
   STORY,
+  beatBounds,
   buildAss,
   cardHtml,
   checkLicenses,
@@ -25,7 +26,6 @@ import {
   parseVoice,
   stillFilter,
   storyAudioFilter,
-  storyText,
   storyTotal,
   wordDrift,
   wordsPerMinute,
@@ -43,6 +43,11 @@ const FFMPEG_CANDIDATES = [
   "ffmpeg",
   "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
 ].filter(Boolean);
+
+// Звук истории живёт сырым PCM: по его длине и проходят границы битов.
+const PCM_RATE = 48000;
+const secondsOfPcm = (bytes) => bytes / (PCM_RATE * 2);
+const round3 = (n) => Math.round(n * 1000) / 1000;
 
 let ffmpegAssCache = null;
 
@@ -82,14 +87,14 @@ export function envValue(name) {
 }
 
 /** Встроенный голос macOS: черновик, чтобы увидеть монтаж. */
-function sayVoice(name, text, dir) {
-  const txt = path.join(dir, "text.txt");
-  const aiff = path.join(dir, "voice.aiff");
-  const wav = path.join(dir, "voice.wav");
+function sayPcm(name, text, dir) {
+  const txt = path.join(dir, "say.txt");
+  const aiff = path.join(dir, "say.aiff");
+  const raw = path.join(dir, "say.pcm");
   writeFileSync(txt, `${text}\n`);
   run("say", ["-v", name, "-r", String(STORY.sayRate), "-f", txt, "-o", aiff]);
-  run("ffmpeg", ["-y", "-i", aiff, "-ar", "48000", "-ac", "1", wav]);
-  return wav;
+  run("ffmpeg", ["-y", "-i", aiff, "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", raw]);
+  return readFileSync(raw);
 }
 
 /** Тихий вызов `yc`: пусто, если консоли нет или она не отвечает. */
@@ -146,14 +151,14 @@ export function joinAudioChunks(stream) {
 
 /**
  * Яндекс SpeechKit, REST v3: один путь для всех голосов. Голоса с амплуа
- * (alexander, anton, kirill) живут только здесь — v1 их не знает.
+ * (alexander, anton, kirill) живут только здесь — v1 их не знает. Текст бита
+ * длиннее предела куска режется по концам фраз и склеивается обратно звуком.
  */
-async function yandexVoice(voice, text, dir, speed) {
-  const auth = yandexAuth();
+async function yandexPcm(voice, text, speed, auth) {
   const hints = [{ voice: voice.name }];
   if (voice.role) hints.push({ role: voice.role });
   hints.push({ speed });
-  const pause = Buffer.alloc(Math.round((48000 * STORY.chunkPauseMs) / 1000) * 2);
+  const pause = Buffer.alloc(Math.round((PCM_RATE * STORY.chunkPauseMs) / 1000) * 2);
   const parts = [];
   for (const piece of chunkText(text)) {
     const res = await fetch("https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis", {
@@ -165,7 +170,7 @@ async function yandexVoice(voice, text, dir, speed) {
       },
       body: JSON.stringify({
         text: piece,
-        outputAudioSpec: { rawAudio: { audioEncoding: "LINEAR16_PCM", sampleRateHertz: 48000 } },
+        outputAudioSpec: { rawAudio: { audioEncoding: "LINEAR16_PCM", sampleRateHertz: PCM_RATE } },
         hints,
         loudnessNormalizationType: "LUFS",
       }),
@@ -179,36 +184,84 @@ async function yandexVoice(voice, text, dir, speed) {
     if (parts.length > 0) parts.push(pause);
     parts.push(joinAudioChunks(await res.text()));
   }
+  return Buffer.concat(parts);
+}
+
+/** Звук одного бита в PCM s16le 48 kHz моно — что бы его ни произносило. */
+async function speakBeat(voice, text, speed, dir, auth) {
+  if (voice.engine === "say") return sayPcm(voice.name, text, dir);
+  return yandexPcm(voice, text, speed, auth);
+}
+
+/**
+ * Голос по битам: у каждого бита свой запрос и свой файл с ключом по тексту,
+ * голосу и скорости, поэтому переозвучивается только изменившийся бит. Биты
+ * склеиваются через STORY.beatPause тишины, и границы битов берутся из ТОЧНОЙ
+ * длины звука каждого из них — не из распознавания. Канон — docs/reels.md.
+ */
+export async function voiceByBeats(story, dir) {
+  const voiceDir = path.join(dir, "voice");
+  mkdirSync(voiceDir, { recursive: true });
+  const auth = story.voice.engine === "yandex" ? yandexAuth() : null;
+  const silence = Buffer.alloc(Math.round(PCM_RATE * STORY.beatPause) * 2);
+  const parts = [];
+  const files = [];
+  let fresh = 0;
+  for (const beat of story.beats) {
+    const key = keyOf([beat.text, story.voice, story.speed]);
+    const raw = path.join(voiceDir, `${key}.pcm`);
+    const wav = path.join(voiceDir, `${key}.wav`);
+    if (!existsSync(raw) || !existsSync(wav)) {
+      const pcm = await speakBeat(story.voice, beat.text, story.speed, voiceDir, auth);
+      writeFileSync(raw, pcm);
+      run("ffmpeg", ["-y", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", "-i", raw, wav]);
+      fresh += 1;
+    }
+    parts.push(readFileSync(raw));
+    files.push({ key, wav });
+  }
+  const bounds = beatBounds(parts.map((pcm) => secondsOfPcm(pcm.length)));
+  const whole = [];
+  for (const [i, pcm] of parts.entries()) {
+    if (i > 0) whole.push(silence);
+    whole.push(pcm);
+  }
   const raw = path.join(dir, "voice.pcm");
   const wav = path.join(dir, "voice.wav");
-  writeFileSync(raw, Buffer.concat(parts));
-  run("ffmpeg", ["-y", "-f", "s16le", "-ar", "48000", "-ac", "1", "-i", raw, wav]);
-  return wav;
+  writeFileSync(raw, Buffer.concat(whole));
+  run("ffmpeg", ["-y", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", "-i", raw, wav]);
+  return { wav, bounds, files, fresh };
 }
 
-export async function synthVoice(voice, text, dir, speed = STORY.speed) {
-  if (voice.engine === "say") return sayVoice(voice.name, text, dir);
-  return yandexVoice(voice, text, dir, speed);
-}
-
-/** Время каждого слова: whisper-cli с -ml 1 -sow режет речь по словам. */
-export function hearWords(wavPath, dir) {
-  const of = path.join(dir, "words");
-  run("whisper-cli", [
-    "-m",
-    WHISPER_MODEL,
-    "-l",
-    "ru",
-    "-ml",
-    "1",
-    "-sow",
-    "-oj",
-    "-of",
-    of,
-    "-f",
-    wavPath,
-  ]);
-  const data = JSON.parse(readFileSync(`${of}.json`, "utf8"));
+/**
+ * Время слов внутри одного бита: whisper-cli с -ml 1 -sow на звуке этого бита.
+ * Короткий кусок он размечает честнее длинного, но всё равно врёт, поэтому его
+ * слова проходят проверку в layoutBeats. Разметка кеширована по ключу бита.
+ */
+export function hearWords(wavPath, outBase) {
+  mkdirSync(path.dirname(outBase), { recursive: true });
+  if (!existsSync(`${outBase}.json`)) {
+    run("whisper-cli", [
+      "-m",
+      WHISPER_MODEL,
+      "-l",
+      "ru",
+      "-ml",
+      "1",
+      "-sow",
+      "-oj",
+      "-of",
+      outBase,
+      "-f",
+      wavPath,
+    ]);
+  }
+  let data;
+  try {
+    data = JSON.parse(readFileSync(`${outBase}.json`, "utf8"));
+  } catch {
+    return [];
+  }
   return (data.transcription || [])
     .map((seg) => ({
       text: String(seg.text || "").trim(),
@@ -216,6 +269,17 @@ export function hearWords(wavPath, dir) {
       end: (seg.offsets?.to ?? 0) / 1000,
     }))
     .filter((w) => w.text && !/^\[.*\]$/.test(w.text));
+}
+
+/** Слова каждого бита во времени всего ролика: сдвиг на начало бита. */
+export function hearByBeats(files, bounds, dir) {
+  return files.map((file, i) =>
+    hearWords(file.wav, path.join(dir, "words", file.key)).map((w) => ({
+      text: w.text,
+      start: round3(w.start + bounds[i].start),
+      end: round3(w.end + bounds[i].start),
+    })),
+  );
 }
 
 /** Ключ кеша: кадр пересобирается, только когда меняется он сам. */
@@ -334,14 +398,35 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
   mkdirSync(framesDir, { recursive: true });
   mkdirSync(clipsDir, { recursive: true });
 
-  const text = storyText(story.beats);
-  const wav = await synthVoice(story.voice, text, dir, story.speed);
-  const heard = hearWords(wav, dir);
-  const layout = layoutBeats(story.beats, heard);
+  const voice = await voiceByBeats(story, dir);
+  const heardByBeat = hearByBeats(voice.files, voice.bounds, dir);
+  const layout = layoutBeats(story.beats, heardByBeat, voice.bounds);
   const total = storyTotal(layout);
   const durations = clipDurations(layout, total);
   const words = flatWords(layout);
-  const drift = wordDrift(words.length, heard.length);
+  const heardCount = heardByBeat.reduce((sum, list) => sum + list.length, 0);
+  const drift = wordDrift(words.length, heardCount);
+  const wav = voice.wav;
+
+  writeFileSync(
+    path.join(dir, "beats.json"),
+    `${JSON.stringify(
+      {
+        pause: STORY.beatPause,
+        total,
+        beats: layout.map((beat) => ({
+          index: beat.index,
+          start: beat.start,
+          end: beat.end,
+          byWhisper: beat.byWhisper,
+          words: beat.words.length,
+          text: story.beats[beat.index].text,
+        })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
   const assPath = path.join(dir, "subs.ass");
   writeFileSync(assPath, buildAss(layout, total));
@@ -380,8 +465,10 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
     title: story.title,
     out: target,
     beats: story.beats.length,
+    byWhisper: layout.filter((beat) => beat.byWhisper).length,
+    resynth: voice.fresh,
     words: words.length,
-    heard: heard.length,
+    heard: heardCount,
     drift,
     voice: story.voice,
     speed: story.speed,
@@ -403,6 +490,8 @@ export function report(r) {
     `  voice: ${r.voice.engine}:${r.voice.name}${r.voice.role ? `:${r.voice.role}` : ""}` +
       ` · скорость ${r.speed}${r.voice.engine === "say" ? " (черновик: озвучить SpeechKit)" : ""}` +
       ` · ${r.music ? `music ${path.basename(r.music)}` : "музыки нет"} · субтитры ${r.subs}`,
+    `  озвучено заново битов ${r.resynth} из ${r.beats} · время слов от whisper` +
+      ` в ${r.byWhisper} битах, в остальных по буквам`,
   ];
   if (r.drift > 0.15) {
     lines.push(
