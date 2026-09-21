@@ -1,8 +1,8 @@
 {
   "id": "robot-knife",
   "title": "Роботу дали нож",
-  "voice": "yandex:ermil:good",
-  "speed": 1.25,
+  "voice": "eleven:ogi2DyUAKJb7CEdqqvlU",
+  "speed": 1.0,
   "colors": {
     "bg": "#111418",
     "ink": "#F4F1EA",
