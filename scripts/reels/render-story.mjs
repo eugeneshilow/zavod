@@ -22,16 +22,24 @@ import {
   clipDurations,
   elevenTempo,
   flatWords,
+  groupBeatsByLimit,
+  joinVoiceText,
   layoutBeats,
+  layoutFromAlignment,
   mediaFilter,
   parseStory,
   parseVoice,
+  rangesInAlignment,
+  scaleAlignment,
   stillFilter,
   storyAudioFilter,
   storyTotal,
+  storyVoiceKeyParts,
+  storyVoiceTexts,
   voiceCacheParts,
   voiceTextFor,
   wordDrift,
+  wordSpans,
   wordsPerMinute,
 } from "./story.mjs";
 
@@ -248,23 +256,30 @@ function retempoPcm(pcm, tempo, dir) {
   return readFileSync(dst);
 }
 
-/** Один запрос к ElevenLabs: текст куска -> звук в запрошенном формате. */
-async function elevenAsk(voice, text, speed, key, format) {
+/**
+ * Один запрос к ElevenLabs со временем каждого символа. Ответ — JSON:
+ * `audio_base64` и `alignment` (символы, начала, концы). `previous_text` и
+ * `next_text` — соседние куски сценария: по ним движок держит интонацию на шве.
+ */
+async function elevenAskTimed(voice, text, speed, key, format, context = {}) {
   const isV3 = voice.model === STORY.eleven.model;
   const settings = { stability: STORY.eleven.stability };
   // У v3 регулятора скорости нет — её правит atempo; у v2 скорость своя.
   if (!isV3) settings.speed = speed;
+  const body = {
+    text,
+    model_id: voice.model,
+    language_code: STORY.eleven.language,
+    voice_settings: settings,
+  };
+  if (context.previous) body.previous_text = context.previous;
+  if (context.next) body.next_text = context.next;
   const res = await fetch(
-    `${ELEVEN_URL}/${encodeURIComponent(voice.name)}?output_format=${format}`,
+    `${ELEVEN_URL}/${encodeURIComponent(voice.name)}/with-timestamps?output_format=${format}`,
     {
       method: "POST",
       headers: { "xi-api-key": key, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        model_id: voice.model,
-        language_code: STORY.eleven.language,
-        voice_settings: settings,
-      }),
+      body: JSON.stringify(body),
     },
   );
   if (!res.ok) {
@@ -272,51 +287,114 @@ async function elevenAsk(voice, text, speed, key, format) {
     error.status = res.status;
     throw error;
   }
-  return Buffer.from(await res.arrayBuffer());
+  const json = await res.json();
+  if (!json?.audio_base64 || !Array.isArray(json?.alignment?.characters)) {
+    throw new Error(
+      "ElevenLabs ответил без звука или без таймкодов: эндпоинт with-timestamps " +
+        "вернул не то, чего мы ждём (см. край канона в docs/reels.md).",
+    );
+  }
+  return { audio: Buffer.from(json.audio_base64, "base64"), alignment: json.alignment };
+}
+
+/** Тот же запрос, но с одной повторной попыткой при отказе ПО ФОРМАТУ звука. */
+async function elevenTimed(voice, text, speed, key, dir, context) {
+  let format = elevenFormat || ELEVEN_PCM;
+  let answer;
+  try {
+    answer = await elevenAskTimed(voice, text, speed, key, format, context);
+  } catch (error) {
+    // Всё, кроме формата (тариф, ключ, сеть), летит человеку как есть: вторая
+    // попытка тем же запросом только сожгла бы кредиты.
+    const aboutFormat = [400, 422].includes(error.status);
+    if (!aboutFormat || elevenFormat || format === ELEVEN_MP3) throw error;
+    format = ELEVEN_MP3;
+    answer = await elevenAskTimed(voice, text, speed, key, format, context);
+  }
+  elevenFormat = format;
+  return {
+    pcm: format === ELEVEN_PCM ? answer.audio : mp3ToPcm(answer.audio, dir),
+    alignment: answer.alignment,
+  };
 }
 
 /**
- * ElevenLabs: основной голос канала. У v3 разметка — аудио-теги в квадратных
- * скобках и многоточия-паузы, регулятора скорости нет, поэтому темп правит
- * atempo по готовому звуку. Сырой PCM закрыт на младших тарифах — на отказ по
- * формату рендер повторяет запрос как MP3 и перекодирует. Канон — docs/reels.md.
+ * ElevenLabs: вся история одним запросом. Биты склеиваются в один текст через
+ * пустую строку (у v3 это пауза), и движок возвращает звук вместе со временем
+ * каждого символа — из них и берутся границы битов и время слов. Распознавание
+ * здесь не участвует вовсе. Сценарий длиннее предела режется по границам битов,
+ * и каждый кусок едет с текстами соседей. Канон — docs/reels.md.
  */
-async function elevenPcm(voice, text, speed, dir) {
+export async function elevenStoryVoice(story, dir) {
+  const voiceDir = path.join(dir, "voice");
+  mkdirSync(voiceDir, { recursive: true });
   const key = envValue("ELEVENLABS_API_KEY");
   if (!key) {
     throw new Error(
       "Голос eleven просит ELEVENLABS_API_KEY в .env.local (ключ из профиля elevenlabs.io).",
     );
   }
-  const isV3 = voice.model === STORY.eleven.model;
-  const pause = Buffer.alloc(Math.round((PCM_RATE * STORY.chunkPauseMs) / 1000) * 2);
-  const parts = [];
-  for (const piece of chunkText(text, isV3 ? STORY.eleven.chunk : STORY.chunk)) {
-    let audio;
-    let format = elevenFormat || ELEVEN_PCM;
+  const texts = storyVoiceTexts(story);
+  const whole = joinVoiceText(texts);
+  const cacheKey = keyOf(storyVoiceKeyParts(story, whole));
+  const raw = path.join(voiceDir, `${cacheKey}.pcm`);
+  const meta = path.join(voiceDir, `${cacheKey}.json`);
+  const wav = path.join(dir, "voice.wav");
+  const tempo = story.voice.model === STORY.eleven.model ? elevenTempo(story.speed) : 1;
+
+  let saved = null;
+  if (existsSync(raw) && existsSync(meta)) {
     try {
-      audio = await elevenAsk(voice, piece, speed, key, format);
-    } catch (error) {
-      // Отказ ПО ФОРМАТУ — вторая и последняя попытка, уже через MP3. Всё
-      // остальное (тариф, ключ, сеть) летит человеку как есть: вторая попытка
-      // тем же запросом только сожгла бы кредиты.
-      const aboutFormat = [400, 422].includes(error.status);
-      if (!aboutFormat || elevenFormat || format === ELEVEN_MP3) throw error;
-      format = ELEVEN_MP3;
-      audio = await elevenAsk(voice, piece, speed, key, format);
+      saved = JSON.parse(readFileSync(meta, "utf8"));
+    } catch {
+      saved = null;
     }
-    elevenFormat = format;
-    if (parts.length > 0) parts.push(pause);
-    parts.push(format === ELEVEN_PCM ? audio : mp3ToPcm(audio, dir));
   }
-  const pcm = Buffer.concat(parts);
-  return isV3 ? retempoPcm(pcm, elevenTempo(speed), dir) : pcm;
+  if (saved?.format) elevenFormat = saved.format;
+
+  let fresh = 0;
+  if (!saved?.spans) {
+    const groups = groupBeatsByLimit(texts);
+    const pause = Buffer.alloc(Math.round(PCM_RATE * STORY.beatPause) * 2);
+    const parts = [];
+    const spans = [];
+    let at = 0;
+    for (const [g, group] of groups.entries()) {
+      const pieces = group.map((i) => texts[i]);
+      const answer = await elevenTimed(story.voice, joinVoiceText(pieces), story.speed, key, dir, {
+        previous: g > 0 ? joinVoiceText(groups[g - 1].map((i) => texts[i])) : null,
+        next: g + 1 < groups.length ? joinVoiceText(groups[g + 1].map((i) => texts[i])) : null,
+      });
+      if (parts.length > 0) {
+        parts.push(pause);
+        at = round3(at + STORY.beatPause / tempo);
+      }
+      parts.push(answer.pcm);
+      // Темп правит дорожку целиком, значит и времена делятся на тот же коэффициент.
+      const aligned = scaleAlignment(answer.alignment, tempo);
+      const ranges = rangesInAlignment(aligned, pieces);
+      for (const [k, i] of group.entries()) {
+        const offset = at;
+        spans[i] = wordSpans(aligned, ranges[k]).map((w) => ({
+          text: w.text,
+          start: round3(w.start + offset),
+          end: round3(w.end + offset),
+        }));
+      }
+      at = round3(at + secondsOfPcm(answer.pcm.length) / tempo);
+    }
+    writeFileSync(raw, retempoPcm(Buffer.concat(parts), tempo, voiceDir));
+    saved = { spans, groups: groups.length, format: elevenFormat, tempo };
+    writeFileSync(meta, `${JSON.stringify(saved, null, 2)}\n`);
+    fresh = 1;
+  }
+  run("ffmpeg", ["-y", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", "-i", raw, wav]);
+  return { kind: "aligned", wav, spansByBeat: saved.spans, groups: saved.groups, fresh };
 }
 
 /** Звук одного бита в PCM s16le 48 kHz моно — что бы его ни произносило. */
 async function speakBeat(voice, text, speed, dir, auth) {
   if (voice.engine === "say") return sayPcm(voice.name, text, dir);
-  if (voice.engine === "eleven") return elevenPcm(voice, text, speed, dir);
   return yandexPcm(voice, text, speed, auth);
 }
 
@@ -349,6 +427,7 @@ export async function voiceByBeats(story, dir) {
     files.push({ key, wav });
   }
   const bounds = beatBounds(parts.map((pcm) => secondsOfPcm(pcm.length)));
+  // Сюда приходят только say и yandex: у ElevenLabs своя дорога, одним куском.
   const whole = [];
   for (const [i, pcm] of parts.entries()) {
     if (i > 0) whole.push(silence);
@@ -526,9 +605,14 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
   mkdirSync(framesDir, { recursive: true });
   mkdirSync(clipsDir, { recursive: true });
 
-  const sound = await voiceByBeats(story, dir);
-  const heardByBeat = hearByBeats(sound.files, sound.bounds, dir);
-  const layout = layoutBeats(story.beats, heardByBeat, sound.bounds);
+  // У ElevenLabs вся история озвучивается одним запросом, и времена слов
+  // приходят таймкодами символов; у say и SpeechKit — по битам плюс whisper.
+  const oneShot = story.voice.engine === "eleven";
+  const sound = oneShot ? await elevenStoryVoice(story, dir) : await voiceByBeats(story, dir);
+  const heardByBeat = oneShot ? sound.spansByBeat : hearByBeats(sound.files, sound.bounds, dir);
+  const layout = oneShot
+    ? layoutFromAlignment(story.beats, sound.spansByBeat)
+    : layoutBeats(story.beats, heardByBeat, sound.bounds);
   const total = storyTotal(layout);
   const durations = clipDurations(layout, total);
   const words = flatWords(layout);
@@ -547,6 +631,7 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
           start: beat.start,
           end: beat.end,
           byWhisper: beat.byWhisper,
+          byAlignment: Boolean(beat.byAlignment),
           words: beat.words.length,
           text: story.beats[beat.index].text,
         })),
@@ -593,7 +678,10 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
     title: story.title,
     out: target,
     beats: story.beats.length,
+    oneShot,
+    requests: oneShot ? sound.groups : story.beats.length,
     byWhisper: layout.filter((beat) => beat.byWhisper).length,
+    byAlignment: layout.filter((beat) => beat.byAlignment).length,
     resynth: sound.fresh,
     words: words.length,
     heard: heardCount,
@@ -623,8 +711,12 @@ export function report(r) {
       `${r.format ? ` · формат ${r.format}` : ""}` +
       ` · скорость ${r.speed}${r.voice.engine === "say" ? " (черновик: озвучить живым движком)" : ""}` +
       ` · ${r.music ? `music ${path.basename(r.music)}` : "музыки нет"} · субтитры ${r.subs}`,
-    `  озвучено заново битов ${r.resynth} из ${r.beats} · время слов от whisper` +
-      ` в ${r.byWhisper} битах, в остальных по буквам`,
+    r.oneShot
+      ? `  озвучено ${r.resynth ? "заново" : "из кеша"} · вся история ${r.requests} запросом(ами)` +
+        ` · время слов от таймкодов ElevenLabs в ${r.byAlignment} битах из ${r.beats},` +
+        ` в остальных по буквам`
+      : `  озвучено заново битов ${r.resynth} из ${r.beats} · время слов от whisper` +
+        ` в ${r.byWhisper} битах, в остальных по буквам`,
   ];
   if (r.tempo !== undefined && Math.abs(r.tempo - r.speed) > 1e-4) {
     lines.push(
@@ -634,8 +726,11 @@ export function report(r) {
   }
   if (r.drift > 0.15) {
     lines.push(
-      `  ⚠️ машина услышала ${r.heard} слов против ${r.words} в тексте` +
-        ` (расхождение ${Math.round(r.drift * 100)} %): проверь субтитры`,
+      r.oneShot
+        ? `  ⚠️ голос сказал ${r.heard} слов против ${r.words} на экране` +
+            ` (расхождение ${Math.round(r.drift * 100)} %): так бывает от чисел словами в say`
+        : `  ⚠️ машина услышала ${r.heard} слов против ${r.words} в тексте` +
+            ` (расхождение ${Math.round(r.drift * 100)} %): проверь субтитры`,
     );
   }
   return lines.join("\n");
