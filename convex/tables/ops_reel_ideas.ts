@@ -10,6 +10,24 @@ import { requireAdminToken } from "../services/admin_gate";
 
 const MAX_TEXT = 2000;
 
+/** Дольше этого идея в работе не висит: раннер умер — она вернётся с причиной. */
+export const STALE_MS = 2 * 60 * 60 * 1000;
+export const STALE_NOTE = "зависла в работе больше двух часов";
+
+/**
+ * Идея зависла: раннер взял её в работу и не вернулся. Время считается от
+ * момента, когда её взяли; поля нет — от появления в лотке.
+ */
+export function isStale(
+  row: { status: string; takenAt?: number | null; createdAt: number },
+  now: number,
+  olderThanMs: number,
+): boolean {
+  if (row.status !== "taken") return false;
+  const since = row.takenAt ?? row.createdAt;
+  return now - since >= olderThanMs;
+}
+
 const ideaValidator = v.object({
   id: v.id("ops_reel_ideas"),
   text: v.string(),
@@ -90,12 +108,39 @@ export const takeNext = mutation({
   },
 });
 
+/**
+ * Идеи, застрявшие в работе дольше срока, возвращаются как «не вышло»: раннер
+ * на маке мог умереть между «взял» и «готово», и без этого идея висела бы в
+ * работе вечно. Зовёт сам раннер первым делом каждого тика.
+ */
+export const requeueStale = mutation({
+  args: { token: v.string(), olderThanMs: v.optional(v.number()) },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    requireAdminToken(args.token);
+    const olderThanMs = args.olderThanMs ?? STALE_MS;
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("ops_reel_ideas")
+      .withIndex("by_status_created", (q) => q.eq("status", "taken"))
+      .collect();
+    let freed = 0;
+    for (const row of rows) {
+      if (!isStale(row, now, olderThanMs)) continue;
+      await ctx.db.patch(row._id, { status: "failed", note: STALE_NOTE });
+      freed += 1;
+    }
+    return freed;
+  },
+});
+
 /** Ролик уехал: taken -> done, с адресом поста, если он уже известен. */
 export const finish = mutation({
   args: {
     token: v.string(),
     id: v.id("ops_reel_ideas"),
     storyId: v.optional(v.string()),
+    story: v.optional(v.string()),
     permalink: v.optional(v.string()),
     note: v.optional(v.string()),
   },
@@ -108,6 +153,7 @@ export const finish = mutation({
       status: "done",
       doneAt: Date.now(),
       storyId: args.storyId ?? row.storyId,
+      story: args.story ?? row.story,
       permalink: args.permalink ?? row.permalink,
       note: args.note ?? row.note,
     });
@@ -117,13 +163,22 @@ export const finish = mutation({
 
 /** Ролик не вышел: taken -> failed с причиной, её видно на экране. */
 export const fail = mutation({
-  args: { token: v.string(), id: v.id("ops_reel_ideas"), note: v.string() },
+  args: {
+    token: v.string(),
+    id: v.id("ops_reel_ideas"),
+    note: v.string(),
+    story: v.optional(v.string()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     requireAdminToken(args.token);
     const row = await ctx.db.get(args.id);
     if (!row) throw new Error("идеи с таким id в лотке нет");
-    await ctx.db.patch(args.id, { status: "failed", note: args.note.trim() || "без причины" });
+    await ctx.db.patch(args.id, {
+      status: "failed",
+      note: args.note.trim() || "без причины",
+      story: args.story ?? row.story,
+    });
     return null;
   },
 });

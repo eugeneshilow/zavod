@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Раннер лотка идей (⚖️ idea-runner-on-mac, 2026-09-21): МАШИНА Pro, тик
+     10 минут. Берёт из лотка ops_reel_ideas самую старую идею, пишет историю
+     безголовым Claude по рецепту мозга short-videos, рендерит ролик и ставит
+     его в очередь публикации. Замок out/ideas/.lock не даёт тикам наложиться.
+
+     Env: IDEA_RUNNER_PROFILE — профиль подписки Claude, из которого пишется
+     история (на Pro живёт headless-токен ~/.claude-jvshilov-token);
+     NODE_OPTIONS=--dns-result-order=ipv4first — IPv6 до Convex с Pro уходит
+     в VPN-туннель и даёт «fetch failed»/ETIMEDOUT.
+
+     Установка (Pro): cp scripts/launchd/ru.vibecoding.zavod-idea-runner.plist ~/Library/LaunchAgents/
+                      launchctl load ~/Library/LaunchAgents/ru.vibecoding.zavod-idea-runner.plist
+     Остановка:       launchctl unload ~/Library/LaunchAgents/ru.vibecoding.zavod-idea-runner.plist
+     Лог: ~/Library/Logs/zavod-idea-runner.log · канон: docs/reels.md, «Раннер идей» -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ru.vibecoding.zavod-idea-runner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd "$HOME/Dropbox/5-code/zavod/main" &amp;&amp; node scripts/reels/idea-runner.mjs</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>IDEA_RUNNER_PROFILE</key>
+    <string>jvshilov</string>
+    <key>NODE_OPTIONS</key>
+    <string>--dns-result-order=ipv4first</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/eugeneshilov/Library/Logs/zavod-idea-runner.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/eugeneshilov/Library/Logs/zavod-idea-runner.log</string>
+</dict>
+</plist>
