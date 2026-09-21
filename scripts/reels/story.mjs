@@ -19,7 +19,9 @@ export const STORY = {
   speed: 1.1,
   // Синхронный SpeechKit v3 берёт короткими кусками — 250 знаков за запрос.
   chunk: 240,
-  // ElevenLabs: настройки голоса канала — спокойный невозмутимый рассказчик.
+  // ElevenLabs: настройки голоса. stability — насколько ровно читает движок:
+  // ниже 0.3 он слышит теги и знаки, выше 0.6 почти не замечает их. Это только
+  // умолчание: история перекрывает его своим полем. Канон — docs/reels.md.
   eleven: {
     model: "eleven_v3",
     modelV2: "eleven_multilingual_v2",
@@ -135,6 +137,25 @@ export function parseFlow(value) {
   return flow;
 }
 
+/**
+ * Ровность чтения у ElevenLabs: 0 — живая игра голосом, 1 — ровное чтение.
+ * Поля нет — берётся умолчание `STORY.eleven.stability`; поле есть — оно и
+ * побеждает. Канон — docs/reels.md, «Уровень экспрессии канала».
+ */
+export function parseStability(value) {
+  if (value === undefined || value === null || value === "") return STORY.eleven.stability;
+  const stability = Number(value);
+  if (!Number.isFinite(stability) || stability < 0 || stability > 1) {
+    throw new Error(`История: stability бывает от 0 до 1, а не «${value}»`);
+  }
+  return stability;
+}
+
+/** Ровность чтения этой истории: своё поле, иначе умолчание канала. */
+export function storyStability(story) {
+  return parseStability(story?.stability);
+}
+
 function parseVisual(raw, i) {
   const kind = need(raw?.kind, `beats[${i}].visual.kind`);
   if (!VISUAL_KINDS.includes(kind)) {
@@ -183,6 +204,8 @@ export function parseStory(raw) {
     speed: Number(raw?.speed ?? STORY.speed),
     // Как сшиты биты в речи: по донору без пауз — умолчание новой истории.
     flow: parseFlow(raw?.flow),
+    // Насколько ровно читает ElevenLabs: поле истории старше умолчания канала.
+    stability: parseStability(raw?.stability),
     sources: Array.isArray(raw?.sources) ? raw.sources : [],
     beats: beats.map((beat, i) => ({
       text: String(need(beat?.text, `beats[${i}].text`)).trim(),
@@ -321,7 +344,7 @@ export function voiceCacheParts(story, beat) {
     name,
     role ?? null,
     model ?? null,
-    engine === "eleven" ? STORY.eleven.stability : null,
+    engine === "eleven" ? storyStability(story) : null,
     story.speed,
   ];
 }
@@ -370,7 +393,7 @@ export function joinVoiceText(texts, gap = STORY.eleven.beatGap) {
 export function storyVoiceKeyParts(story, text) {
   const { engine, name, model } = story.voice;
   const isV3 = model === STORY.eleven.model;
-  return [text, engine, name, model ?? null, STORY.eleven.stability, isV3 ? null : story.speed];
+  return [text, engine, name, model ?? null, storyStability(story), isV3 ? null : story.speed];
 }
 
 /**
