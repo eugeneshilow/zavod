@@ -84,6 +84,7 @@ export const enqueueFromStorage = internalMutation({
     mediaType: v.optional(mediaTypeValidator),
     scheduledAt: v.optional(v.number()),
     account: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
   },
   returns: v.object({
     id: v.id("data_cooked_instagram_reels"),
@@ -118,6 +119,7 @@ export const enqueueFromStorage = internalMutation({
       scheduledAt,
       attempts: 0,
       account: args.account ?? DEFAULT_ACCOUNT,
+      durationMs: args.durationMs,
       createdAt: Date.now(),
     });
     return { id, channel, scheduledAt };

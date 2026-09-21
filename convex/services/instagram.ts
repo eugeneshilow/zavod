@@ -399,6 +399,8 @@ export type IgMediaMetrics = {
   totalInteractions?: number;
   avgWatchTimeMs?: number;
   videoViewTotalTimeMs?: number;
+  skipRate?: number;
+  reposts?: number;
 };
 
 const INSIGHT_METRICS = [
@@ -417,6 +419,14 @@ const REELS_INSIGHT_METRICS = [
   "ig_reels_video_view_total_time",
 ] as const;
 
+// Новые метрики площадки: доля ушедших за три секунды и репосты. Старые
+// версии API их не знают, поэтому список пробуется первым и откатывается.
+const REELS_INSIGHT_METRICS_FULL = [
+  ...REELS_INSIGHT_METRICS,
+  "reels_skip_rate",
+  "reposts",
+] as const;
+
 const INSIGHT_KEYS: Record<string, keyof IgMediaMetrics> = {
   views: "views",
   reach: "reach",
@@ -427,6 +437,8 @@ const INSIGHT_KEYS: Record<string, keyof IgMediaMetrics> = {
   total_interactions: "totalInteractions",
   ig_reels_avg_watch_time: "avgWatchTimeMs",
   ig_reels_video_view_total_time: "videoViewTotalTimeMs",
+  reels_skip_rate: "skipRate",
+  reposts: "reposts",
 };
 
 async function requestMediaInsights(
@@ -454,13 +466,19 @@ export async function getMediaInsights(
   token: string,
   mediaId: string,
 ): Promise<IgMediaMetrics | null> {
-  let json: Record<string, unknown>;
-  try {
-    json = await requestMediaInsights(token, mediaId, REELS_INSIGHT_METRICS);
-  } catch (error) {
-    if (isPermissionError(error) || !isUnsupportedMetricError(error)) throw error;
-    json = await requestMediaInsights(token, mediaId, INSIGHT_METRICS);
+  // От полного списка к базовому: площадка не знает метрику — пробуем короче.
+  const attempts = [REELS_INSIGHT_METRICS_FULL, REELS_INSIGHT_METRICS, INSIGHT_METRICS] as const;
+  let json: Record<string, unknown> | null = null;
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      json = await requestMediaInsights(token, mediaId, attempts[i]);
+      break;
+    } catch (error) {
+      const last = i === attempts.length - 1;
+      if (last || isPermissionError(error) || !isUnsupportedMetricError(error)) throw error;
+    }
   }
+  if (json === null) return null;
 
   if (!Array.isArray(json.data) || json.data.length === 0) return null;
   const metrics: IgMediaMetrics = {};

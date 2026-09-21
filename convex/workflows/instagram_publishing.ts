@@ -473,6 +473,7 @@ async function collectForAccount(ctx: ActionCtx, state: IgState): Promise<Metric
   if (followers !== undefined || quotaUsage !== undefined) {
     await ctx.runMutation(internal.tables.ops_social_snapshots.record, {
       network: "instagram",
+      account: state.account,
       followers,
       quotaUsage,
       quotaTotal,
