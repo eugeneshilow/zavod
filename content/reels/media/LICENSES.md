@@ -12,3 +12,10 @@
 `bread-in-toaster.jpg` · https://commons.wikimedia.org/wiki/File:Bread_in_Toaster_(51920214512).jpg (Dejan Krsmanovic) · CC BY 2.0 · 2026-09-20
 `bleach-bottles.jpg` · https://commons.wikimedia.org/wiki/File:HK_Kao_Bleaches_2.JPG (Meadohsum) · CC BY-SA 3.0 · 2026-09-20
 `toy-robot-arm.jpg` · https://commons.wikimedia.org/wiki/File:Hydraulic_toy_robot_arm_gripper.jpg (Scoid) · CC BY-SA 4.0 · 2026-09-20
+
+## jev-judge
+
+`typesafe-intro.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (Diogo Almeida, TypeSafe AI, ролик запуска Jev, 0:00–0:09) · цитирование источника новости с указанием автора · 2026-09-21
+`typesafe-race.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (TypeSafe AI, ролик запуска, 1:01–1:13, гонка двух терминалов) · цитирование источника новости с указанием автора · 2026-09-21
+`typesafe-chart.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (TypeSafe AI, ролик запуска, 2:09–2:17, график Intelligence / Cost) · цитирование источника новости с указанием автора · 2026-09-21
+`calibration-portrait.png` · https://vibecoding.ru/model-jev (фигура редакции на тёмном поле 9:16, наш прогон Jev 21.09.2026) · своё · 2026-09-21
