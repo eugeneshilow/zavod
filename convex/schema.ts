@@ -36,6 +36,9 @@ export default defineSchema({
     permalink: v.optional(v.string()),
     postedAt: v.optional(v.number()),
     error: v.optional(v.string()),
+    // Длина ролика по ffprobe в момент постановки в очередь: по ней экран
+    // считает досмотр (среднее время просмотра к длине). Старые строки — без неё.
+    durationMs: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_channel_status_scheduled", ["channel", "status", "scheduledAt"])
@@ -75,6 +78,9 @@ export default defineSchema({
       totalInteractions: v.optional(v.number()),
       avgWatchTimeMs: v.optional(v.number()),
       videoViewTotalTimeMs: v.optional(v.number()),
+      // Доля зрителей, ушедших в первые три секунды (0–100), и репосты.
+      skipRate: v.optional(v.number()),
+      reposts: v.optional(v.number()),
     }),
   }).index("by_media_captured", ["mediaRef", "capturedAt"]),
 
@@ -130,6 +136,8 @@ export default defineSchema({
   // Дневной снимок аккаунта: подписчики и расход суточного лимита.
   ops_social_snapshots: defineTable({
     network: v.string(),
+    // Чей это снимок: аккаунт сети. Старые строки без поля — по detail.
+    account: v.optional(v.string()),
     capturedAt: v.number(),
     followers: v.optional(v.number()),
     quotaUsage: v.optional(v.number()),

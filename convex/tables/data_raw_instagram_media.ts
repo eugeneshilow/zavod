@@ -138,6 +138,13 @@ export const listAirtimeForAdmin = query({
             .sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0))
             .slice(0, limit);
 
+    // Длина ролика известна очереди (ffprobe при постановке): сшиваем по mediaId.
+    const posted = await ctx.db.query("data_cooked_instagram_reels").collect();
+    const durationByMedia = new Map<string, number>();
+    for (const row of posted) {
+      if (row.mediaId && row.durationMs) durationByMedia.set(row.mediaId, row.durationMs);
+    }
+
     const now = Date.now();
     const out = [];
     for (const item of media) {
@@ -164,6 +171,7 @@ export const listAirtimeForAdmin = query({
         caption: item.caption ?? null,
         postedAt: item.postedAt ?? null,
         missingSince: item.missingSince ?? null,
+        durationMs: durationByMedia.get(item.mediaId) ?? null,
         capturedAt: latest?.capturedAt ?? null,
         metrics: latest?.metrics ?? null,
         views24h: delta(DAY_MS),

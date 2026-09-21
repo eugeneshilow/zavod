@@ -6,8 +6,11 @@ import {
   dayKey,
   ideaStatusWord,
   postsByDay,
+  engagementRate,
+  replays,
   splitAirtime,
   toReel,
+  watchThrough,
   type Reel,
 } from "@/lib/social";
 import SocialPage from "@/app/admin/social/page";
@@ -159,5 +162,20 @@ describe("экраны social без пропуска к базе", () => {
     } finally {
       if (saved) process.env.ADMIN_API_TOKEN = saved;
     }
+  });
+});
+
+describe("цифры ролика: досмотр, повторы, вовлечённость", () => {
+  it("досмотр — среднее время к длине, не выше 100", () => {
+    expect(watchThrough({ avgWatchMs: 20_000, durationMs: 40_000 })).toBe(50);
+    expect(watchThrough({ avgWatchMs: 50_000, durationMs: 40_000 })).toBe(100);
+    expect(watchThrough({ avgWatchMs: 20_000, durationMs: null })).toBeNull();
+    expect(watchThrough({ avgWatchMs: null, durationMs: 40_000 })).toBeNull();
+  });
+  it("повторы и вовлечённость считаются к охвату, без охвата — прочерк", () => {
+    expect(replays({ views: 253, reach: 184 })).toBeCloseTo(1.375, 3);
+    expect(replays({ views: 10, reach: 0 })).toBeNull();
+    expect(engagementRate({ interactions: 2, reach: 184 })).toBeCloseTo(1.087, 2);
+    expect(engagementRate({ interactions: null, reach: 184 })).toBeNull();
   });
 });

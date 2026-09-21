@@ -30,12 +30,38 @@ export type Reel = {
   shares: number | null;
   interactions: number | null;
   avgWatchMs: number | null;
+  /** Длина ролика из очереди (ffprobe при постановке); null у старых строк. */
+  durationMs: number | null;
+  /** Доля ушедших в первые три секунды, 0–100; площадка отдаёт не всегда. */
+  skipRate: number | null;
+  reposts: number | null;
   delta24: number | null;
   delta48: number | null;
   /** Первый сбор, на котором площадка ролик не вернула; null — ролик в эфире. */
   missingSince: number | null;
   caption: string;
 };
+
+/** Единственный аккаунт на экране сети: английский пилот на экран не выводится (⚖️ ru-only-screen). */
+export const IG_ACCOUNT = "ruvibecoding";
+
+/** Досмотр: среднее время просмотра к длине ролика, в процентах; без длины — null. */
+export function watchThrough(r: Pick<Reel, "avgWatchMs" | "durationMs">): number | null {
+  if (r.avgWatchMs == null || !r.durationMs) return null;
+  return Math.min(100, (r.avgWatchMs / r.durationMs) * 100);
+}
+
+/** Повторы: просмотров на одного охваченного; 1,0 — каждый посмотрел один раз. */
+export function replays(r: Pick<Reel, "views" | "reach">): number | null {
+  if (r.views == null || !r.reach) return null;
+  return r.views / r.reach;
+}
+
+/** Вовлечённость: взаимодействия к охвату, в процентах. */
+export function engagementRate(r: Pick<Reel, "interactions" | "reach">): number | null {
+  if (r.interactions == null || !r.reach) return null;
+  return (r.interactions / r.reach) * 100;
+}
 
 export type IdeaStatus = "new" | "taken" | "done" | "failed";
 
@@ -137,6 +163,7 @@ type AirtimeRow = {
   caption?: string | null;
   postedAt?: number | null;
   missingSince?: number | null;
+  durationMs?: number | null;
   views24h?: number | null;
   views48h?: number | null;
   metrics?: {
@@ -148,6 +175,8 @@ type AirtimeRow = {
     shares?: number;
     totalInteractions?: number;
     avgWatchTimeMs?: number;
+    skipRate?: number;
+    reposts?: number;
   } | null;
 };
 
@@ -167,6 +196,9 @@ export function toReel(row: AirtimeRow): Reel {
     shares: m?.shares ?? null,
     interactions: m?.totalInteractions ?? null,
     avgWatchMs: m?.avgWatchTimeMs ?? null,
+    durationMs: row.durationMs ?? null,
+    skipRate: m?.skipRate ?? null,
+    reposts: m?.reposts ?? null,
     delta24: row.views24h ?? null,
     delta48: row.views48h ?? null,
     missingSince: row.missingSince ?? null,
@@ -222,10 +254,18 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
   try {
     const [queue, airtime, toggles, state, snapshot, ideas] = await Promise.all([
       client.query(api.tables.data_cooked_instagram_reels.listForAdmin, { token, limit: 200 }),
-      client.query(api.tables.data_raw_instagram_media.listAirtimeForAdmin, { token, limit: 50 }),
+      client.query(api.tables.data_raw_instagram_media.listAirtimeForAdmin, {
+        token,
+        limit: 50,
+        account: IG_ACCOUNT,
+      }),
       client.query(api.tables.ops_channel_toggles.state, { token }),
       client.query(api.tables.ops_instagram_state.statusForAdmin, { token }),
-      client.query(api.tables.ops_social_snapshots.latest, { token, network: "instagram" }),
+      client.query(api.tables.ops_social_snapshots.latest, {
+        token,
+        network: "instagram",
+        account: IG_ACCOUNT,
+      }),
       client.query(api.tables.ops_reel_ideas.listForAdmin, { token, limit: 10 }),
     ]);
     const weekAgo = now - 7 * DAY;
@@ -247,12 +287,14 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
         label,
         door,
         accounts: isIg
-          ? state.map((s) => ({
-              account: s.account,
-              username: s.username,
-              expiresAt: s.expiresAt,
-              lastRunAt: s.lastRunAt,
-            }))
+          ? state
+              .filter((s) => s.account === IG_ACCOUNT)
+              .map((s) => ({
+                account: s.account,
+                username: s.username,
+                expiresAt: s.expiresAt,
+                lastRunAt: s.lastRunAt,
+              }))
           : [],
         followers: isIg ? (snapshot?.followers ?? null) : null,
         quotaUsage: isIg ? (snapshot?.quotaUsage ?? null) : null,

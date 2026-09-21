@@ -18,6 +18,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { probe } from "./lib.mjs";
 
 /** Двери публикации. Одна очередь, по строке на дверь. */
 export const CHANNELS = ["instagram", "telegram"];
@@ -195,6 +196,17 @@ async function main(argv) {
   }
   const { storageId } = await uploadResp.json();
 
+  // Длина ролика — экрану сети для досмотра; картинке длины нет, ffprobe не
+  // нашёлся — строка едет без неё, публикацию это не останавливает.
+  let durationMs;
+  if (plan.mediaType === "reels") {
+    try {
+      durationMs = Math.round(probe(plan.filePath).duration * 1000);
+    } catch {
+      durationMs = undefined;
+    }
+  }
+
   // Файл один, строк столько, сколько дверей, и плановое время у них общее.
   const scheduledAt = plan.scheduledAt ?? Date.now();
   console.log(
@@ -213,6 +225,7 @@ async function main(argv) {
           mediaType: plan.mediaType,
           account: plan.account,
           scheduledAt,
+          ...(durationMs ? { durationMs } : {}),
         },
         plan.prod,
       );

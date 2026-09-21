@@ -1,12 +1,14 @@
-import Link from "next/link";
 import { setChannelState } from "@/app/admin/actions";
 import { renderDoc, resolveDoc, stripTitle } from "@/lib/docs";
 import { moscow, num, type Channel } from "@/lib/reels";
 import {
   dayKey,
+  engagementRate,
   ideaStatusWord,
   loadSocial,
   NETWORKS,
+  replays,
+  watchThrough,
   type Idea,
   type NetworkGlance,
   type Reel,
@@ -22,22 +24,26 @@ export const dynamic = "force-dynamic";
 const button =
   "rounded border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-700 hover:border-zinc-400";
 
-/** Короткий слаг аккаунта: ruvibecoding — «ru», autovibecoding — «auto». */
-function shortAccount(account: string): string {
-  if (!account) return "—";
-  return account.replace(/vibecoding$/, "") || account;
-}
-
-/** Вовлечённость: взаимодействия к охвату, один знак после запятой. */
-function engagement(r: Reel): string {
-  if (r.interactions == null || !r.reach) return "—";
-  return `${((r.interactions / r.reach) * 100).toFixed(1)}%`;
+/** Процент с одним знаком или прочерк. */
+function pct(v: number | null): string {
+  return v == null ? "—" : `${v.toFixed(1)}%`;
 }
 
 /** Средний просмотр в секундах: площадка отдаёт миллисекунды. */
 function watch(r: Reel): string {
   if (r.avgWatchMs == null) return "—";
   return `${(r.avgWatchMs / 1000).toFixed(1)} с`;
+}
+
+/** Длина ролика в секундах, если очередь её знает. */
+function length(r: Reel): string {
+  return r.durationMs ? `${Math.round(r.durationMs / 1000)} с` : "—";
+}
+
+/** Повторы: 1,4× — в среднем каждый охваченный посмотрел 1,4 раза. */
+function replayText(r: Reel): string {
+  const v = replays(r);
+  return v == null ? "—" : `${v.toFixed(1)}×`;
 }
 
 const TH = "px-2 py-1 text-right text-[10px] font-medium text-zinc-500";
@@ -68,15 +74,19 @@ function ReelRow({ r, muted }: { r: Reel; muted?: boolean }) {
           <span className="ml-2 text-zinc-400">удалён {dayKey(r.missingSince)}</span>
         ) : null}
       </td>
-      <td className={cell}>{shortAccount(r.account)}</td>
       <td className={cell}>{num(r.views)}</td>
       <td className={cell}>{num(r.reach)}</td>
+      <td className={cell}>{replayText(r)}</td>
+      <td className={cell}>{pct(watchThrough(r))}</td>
+      <td className={cell}>{watch(r)}</td>
+      <td className={cell}>{length(r)}</td>
+      <td className={cell}>{pct(r.skipRate)}</td>
       <td className={cell}>{num(r.likes)}</td>
       <td className={cell}>{num(r.comments)}</td>
       <td className={cell}>{num(r.saved)}</td>
       <td className={cell}>{num(r.shares)}</td>
-      <td className={cell}>{engagement(r)}</td>
-      <td className={cell}>{watch(r)}</td>
+      <td className={cell}>{num(r.reposts)}</td>
+      <td className={cell}>{pct(engagementRate(r))}</td>
       <td className={cell}>{r.delta48 == null ? "—" : `+${r.delta48}`}</td>
     </tr>
   );
@@ -149,9 +159,6 @@ function Actions({ n, channel }: { n: NetworkGlance; channel: Channel }) {
               Снять цифры сейчас
             </button>
           </form>
-          <Link prefetch={false} href="/admin/publish#canon" className={button}>
-            Подключить второй аккаунт
-          </Link>
         </>
       ) : null}
     </div>
@@ -196,8 +203,8 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
               label="токен"
               value={n.accounts[0] ? `до ${moscow(n.accounts[0].expiresAt)}` : "—"}
               sub={
-                n.accounts.length
-                  ? `аккаунтов ${n.accounts.length} · прогон ${moscow(n.accounts[0].lastRunAt)}`
+                n.accounts[0]
+                  ? `@${n.accounts[0].username ?? n.accounts[0].account} · прогон ${moscow(n.accounts[0].lastRunAt)}`
                   : "бот по переменным окружения"
               }
             />
@@ -268,15 +275,19 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
                       <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">
                         ролик
                       </th>
-                      <th className={TH}>аккаунт</th>
                       <th className={TH}>просмотры</th>
                       <th className={TH}>охват</th>
+                      <th className={TH}>повторы</th>
+                      <th className={TH}>досмотр</th>
+                      <th className={TH}>ср. просмотр</th>
+                      <th className={TH}>длина</th>
+                      <th className={TH}>ушли за 3 с</th>
                       <th className={TH}>лайки</th>
                       <th className={TH}>комм.</th>
                       <th className={TH}>сохр.</th>
+                      <th className={TH}>шеры</th>
                       <th className={TH}>репосты</th>
                       <th className={TH}>вовлеч.</th>
-                      <th className={TH}>ср. просмотр</th>
                       <th className={TH}>48 ч</th>
                     </tr>
                   </thead>
@@ -286,7 +297,7 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
                     ))}
                     {n.deleted.length > 0 ? (
                       <tr className="border-t border-zinc-200 bg-zinc-50">
-                        <td colSpan={11} className="px-2 py-1 text-[10px] text-zinc-500">
+                        <td colSpan={15} className="px-2 py-1 text-[10px] text-zinc-500">
                           Удалены с площадки — цифры последние известные
                         </td>
                       </tr>
