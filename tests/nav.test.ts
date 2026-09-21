@@ -24,12 +24,15 @@ describe("правило зеркала", () => {
     expect(await resolveDoc([".."])).toBeNull();
   });
 
-  it("заголовок канона даёт имя кнопки и подпись", () => {
+  it("имя кнопки — имя файла, подпись — заголовок канона без повтора имени", () => {
     expect(titleOf("# reels — сборка вертикальных роликов", "reels")).toEqual({
       label: "reels",
       note: "сборка вертикальных роликов",
     });
-    expect(titleOf("# Журнал", "journal")).toEqual({ label: "Журнал" });
+    expect(titleOf("# Выход наружу — репозиторий, Vercel", "deploy")).toEqual({
+      label: "deploy",
+      note: "Выход наружу — репозиторий, Vercel",
+    });
     expect(titleOf("без заголовка", "x")).toEqual({ label: "x" });
   });
 });

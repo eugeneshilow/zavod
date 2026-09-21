@@ -52,17 +52,18 @@ export function flattenNav(node: NavNode): NavNode[] {
 }
 
 /**
- * Заголовок канона → имя и подпись узла. Первая строка вида `# reels — сборка
- * роликов` даёт label «reels» и note «сборка роликов»; без « — » весь заголовок
- * становится именем. Заголовка нет — имя берётся из адреса.
+ * Имя и подпись узла. Имя кнопки — имя файла или папки (адрес и есть имя:
+ * docs/reels.md → кнопка «reels» → /admin/reels). Подпись — первая строка
+ * канона; если она начинается с того же имени и « — », повтор снимается:
+ * `# reels — сборка вертикальных роликов` даёт подпись «сборка вертикальных роликов».
  */
-export function titleOf(md: string, fallback: string): { label: string; note?: string } {
+export function titleOf(md: string, slug: string): { label: string; note?: string } {
   const line = md.split("\n").find((l) => l.startsWith("# "));
-  if (!line) return { label: fallback };
+  if (!line) return { label: slug };
   const text = line.slice(2).trim();
-  const cut = text.indexOf(" — ");
-  if (cut < 0) return { label: text };
-  return { label: text.slice(0, cut).trim(), note: text.slice(cut + 3).trim() };
+  const prefix = `${slug} — `;
+  const note = text.startsWith(prefix) ? text.slice(prefix.length).trim() : text;
+  return note ? { label: slug, note } : { label: slug };
 }
 
 /**

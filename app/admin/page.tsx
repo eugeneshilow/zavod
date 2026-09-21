@@ -81,7 +81,7 @@ export default async function Admin() {
             accent={check?.status === "red"}
             lines={[
               check
-                ? `проверка ${check.status === "green" ? "зелёная" : "красная"} · ${check.at} · ${Math.round(check.durationMs / 1000)} с`
+                ? `проверка ${check.status === "green" ? "зелёная" : "красная"} · ${moscow(Date.parse(check.at))} МСК · ${Math.round(check.durationMs / 1000)} с`
                 : "проверка ещё не запускалась",
               `коммит ${deploy.commit} · ${deploy.url}`,
             ]}
@@ -113,11 +113,14 @@ export default async function Admin() {
       <section className="space-y-2">
         <SectionLabel id="decisions">РЕШЕНИЯ — журнал, новые сверху</SectionLabel>
         <div className="rounded-md border border-zinc-200 bg-white p-3">
-          <ul data-testid="decisions" className="space-y-1 text-xs leading-5">
+          <ul
+            data-testid="decisions"
+            className="grid grid-cols-[auto_auto_1fr] gap-x-3 gap-y-0.5 text-xs leading-5"
+          >
             {list.map((d) => (
-              <li key={d.name} className="flex flex-wrap gap-x-2">
-                <span className="tabular-nums text-zinc-400">{d.date}</span>
-                <span className="font-medium text-[#C2410C]">{d.name}</span>
+              <li key={d.name} className="contents">
+                <span className="whitespace-nowrap tabular-nums text-zinc-400">{d.date}</span>
+                <span className="whitespace-nowrap font-medium text-[#C2410C]">{d.name}</span>
                 <span className="text-zinc-700">{d.title}</span>
               </li>
             ))}

@@ -63,7 +63,7 @@ export function projectSentence(readme: string): string {
   const after = readme.slice(idx + "## Что это".length).trim();
   const para = after.split("\n\n")[0] ?? "";
   const m = para.match(/^[^.!?]*[.!?]/);
-  return (m ? m[0] : para).trim();
+  return (m ? m[0] : para).trim().replace(/`/g, "");
 }
 
 export type Decision = { date: string; name: string; title: string };
@@ -154,7 +154,7 @@ export async function navTree(): Promise<NavNode> {
   return {
     href: "/admin",
     label: projectTitle(readme),
-    note: titleOf(admin, "admin").note ?? "стекло проекта",
+    note: titleOf(admin, "Админка").note ?? "стекло проекта",
     doc: "docs/admin.md",
     children,
   };
