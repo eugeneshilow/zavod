@@ -141,16 +141,59 @@ async function zonesIn(dir: string, rel: string, depth: number): Promise<NavNode
 }
 
 /**
- * Дерево админки из папки docs/: каждая зона — файл `docs/<зона>.md` или папка
- * `docs/<зона>/` с README.md; корень — docs/admin.md. Новый файл в docs
- * появляется в хедере сам, без правки кода.
+ * Список зон хедера — раздел «## Хедер» в docs/admin.md, строки `- <зона>`.
+ * Что стоит кнопкой — решение в каноне, не папка целиком (⚖️ header-by-canon).
+ */
+export function headerZones(adminMd: string): string[] {
+  const lines = adminMd.split("\n");
+  const start = lines.findIndex((l) => /^## Хедер\s*$/.test(l));
+  if (start < 0) return [];
+  const out: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith("## ")) break;
+    const m = line.match(/^- ([\w-]+)\s*$/);
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+
+/** Узел одной зоны: файл docs/<зона>.md или папка docs/<зона>/ с README и подпапками. */
+async function zoneNode(slug: string): Promise<NavNode | null> {
+  const asFile = path.join(DOCS, `${slug}.md`);
+  const asDir = path.join(DOCS, slug);
+  try {
+    const md = await readFile(asFile, "utf8");
+    return { href: hrefOf(`docs/${slug}.md`), doc: `docs/${slug}.md`, ...titleOf(md, slug) };
+  } catch {
+    // не файл — пробуем папку
+  }
+  try {
+    const md = await readFile(path.join(asDir, "README.md"), "utf8");
+    const doc = `docs/${slug}/README.md`;
+    const children = await zonesIn(asDir, `docs/${slug}`, 1);
+    return {
+      href: hrefOf(doc),
+      doc,
+      ...titleOf(md, slug),
+      ...(children.length ? { children } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Дерево админки: корень — docs/admin.md, зоны хедера — из его списка «Хедер»,
+ * у каждой зоны дети — файлы и подпапки её папки. Зоны вне списка экранами
+ * по адресу остаются (resolveDoc), в хедер не попадают.
  */
 export async function navTree(): Promise<NavNode> {
   const [readme, admin] = await Promise.all([
     readDoc("README.md"),
     readFile(path.join(DOCS, "admin.md"), "utf8").catch(() => ""),
   ]);
-  const children = await zonesIn(DOCS, "docs", 0);
+  const nodes = await Promise.all(headerZones(admin).map((slug) => zoneNode(slug)));
+  const children = nodes.filter((n): n is NavNode => n !== null);
   return {
     href: "/admin",
     label: projectTitle(readme),

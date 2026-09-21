@@ -9,6 +9,7 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as services_admin_actions from "../services/admin_actions.js";
 import type * as services_admin_gate from "../services/admin_gate.js";
 import type * as services_instagram from "../services/instagram.js";
 import type * as services_reels_queue from "../services/reels_queue.js";
@@ -30,6 +31,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  "services/admin_actions": typeof services_admin_actions;
   "services/admin_gate": typeof services_admin_gate;
   "services/instagram": typeof services_instagram;
   "services/reels_queue": typeof services_reels_queue;

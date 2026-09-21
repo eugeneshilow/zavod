@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { navTree, resolveDoc } from "@/lib/docs";
+import { headerZones, navTree, resolveDoc } from "@/lib/docs";
 import { breadcrumbFor, childrenFor, flattenNav, hrefOf, titleOf } from "@/lib/nav-tree";
 
 // Правило зеркала (docs/admin.md): адрес экрана = адрес канона. Тест держит
@@ -37,35 +37,38 @@ describe("правило зеркала", () => {
   });
 });
 
-describe("дерево из папки docs", () => {
-  it("зоны — файлы и папки docs, служебные файлы и admin.md в хедер не попадают", async () => {
+describe("дерево хедера из списка в docs/admin.md", () => {
+  it("список «Хедер» читается из канона, чужие строки не считаются", () => {
+    const md =
+      "# Админка\n\n## Хедер\n\nтекст\n\n- brains\n- social\n- not a slug!\n\n## Дальше\n\n- reels\n";
+    expect(headerZones(md)).toEqual(["brains", "social"]);
+    expect(headerZones("# без раздела")).toEqual([]);
+  });
+
+  it("в хедере только зоны из списка, и у каждой есть файл или папка в docs", async () => {
     const tree = await navTree();
     const hrefs = (tree.children ?? []).map((zone) => zone.href);
     expect(tree.href).toBe("/admin");
-    expect(hrefs).toEqual(
-      expect.arrayContaining([
-        "/admin/reels",
-        "/admin/publish",
-        "/admin/deploy",
-        "/admin/research",
-      ]),
-    );
+    expect(hrefs).toEqual(["/admin/brains", "/admin/social"]);
+    expect(hrefs).not.toContain("/admin/reels");
     expect(hrefs).not.toContain("/admin/journal");
-    expect(hrefs).not.toContain("/admin/README");
-    expect(hrefs).not.toContain("/admin/admin");
     for (const node of flattenNav(tree)) expect(node.href).toBe(hrefOf(node.doc));
+    expect((await resolveDoc(["reels"]))?.doc).toBe("docs/reels.md");
   });
 
   it("крошки и дети считаются по адресу", async () => {
     const tree = await navTree();
-    const chain = breadcrumbFor(tree, "/admin/research/2026-09-20-gus-formula");
+    const chain = breadcrumbFor(tree, "/admin/social/instagram");
     expect(chain.map((n) => n.href)).toEqual([
       "/admin",
-      "/admin/research",
-      "/admin/research/2026-09-20-gus-formula",
+      "/admin/social",
+      "/admin/social/instagram",
     ]);
-    expect(childrenFor(tree, "/admin/research").length).toBeGreaterThan(0);
-    expect(childrenFor(tree, "/admin/reels")).toEqual([]);
+    expect(childrenFor(tree, "/admin/social").map((n) => n.href)).toEqual([
+      "/admin/social/instagram",
+      "/admin/social/telegram",
+    ]);
+    expect(childrenFor(tree, "/admin/brains").length).toBeGreaterThan(0);
     expect(breadcrumbFor(tree, "/admin/net-takoy").map((n) => n.href)).toEqual(["/admin"]);
   });
 });
