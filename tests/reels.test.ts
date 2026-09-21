@@ -18,16 +18,22 @@ import {
   layoutBeats,
   chunkText,
   cleanText,
+  collapseSilence,
+  dotToComma,
   elevenTempo,
+  flowGap,
+  gapStats,
   groupBeatsByLimit,
   joinVoiceText,
   layoutFromAlignment,
   letterDurations,
   mapWordsToSpans,
+  parseFlow,
   parseStory,
   parseVoice,
   rangesInAlignment,
   scaleSpans,
+  silenceGaps,
   splitWords,
   storyAudioFilter,
   storyTotal,
@@ -301,7 +307,8 @@ describe("вся история одним запросом к ElevenLabs", () =
       visual: { kind: "card", big: "2", small: "y" },
     },
   ];
-  const parsed = { voice: parseVoice("eleven:abc"), speed: 1.0, beats };
+  // Здесь проверяется прежний режим: биты через пустую строку.
+  const parsed = { voice: parseVoice("eleven:abc"), speed: 1.0, flow: "paused", beats };
   const texts: string[] = storyVoiceTexts(parsed);
   const whole: string = joinVoiceText(texts);
 
@@ -418,6 +425,124 @@ describe("вся история одним запросом к ElevenLabs", () =
     // Бит длиннее предела целиком остаётся в своём куске: пополам не рвём.
     expect(groupBeatsByLimit(["а".repeat(20), "б"], 8)).toEqual([[0], [1]]);
     expect(groupBeatsByLimit(texts)).toEqual([[0, 1]]);
+  });
+});
+
+/** Кусок «речи»: ровный тон, который детектор тишины точно слышит. */
+function tone(seconds: number, hz = 220, amp = 8000): Buffer {
+  const n = Math.round(48000 * seconds);
+  const buf = Buffer.alloc(n * 2);
+  for (let i = 0; i < n; i += 1) {
+    buf.writeInt16LE(Math.round(amp * Math.sin((2 * Math.PI * hz * i) / 48000)), i * 2);
+  }
+  return buf;
+}
+
+/** Кусок тишины ровно на seconds секунд. */
+function hush(seconds: number): Buffer {
+  return Buffer.alloc(Math.round(48000 * seconds) * 2);
+}
+
+describe("поток без пауз", () => {
+  const beats = [
+    { text: "Это не хоррор. Это тест.", visual: { kind: "card", big: "1", small: "x" } },
+    { text: "А что если нет?", visual: { kind: "card", big: "2", small: "y" } },
+    { text: "Нож лучше убрать.", visual: { kind: "card", big: "3", small: "z" } },
+  ];
+
+  it("flow бывает двух значений, и по умолчанию история идёт без пауз", () => {
+    expect(parseFlow(undefined)).toBe("continuous");
+    expect(parseFlow("")).toBe("continuous");
+    expect(parseFlow("paused")).toBe("paused");
+    expect(() => parseFlow("slow")).toThrow(/flow/);
+    expect(parseStory(story).flow).toBe("continuous");
+    expect(parseStory({ ...story, flow: "paused" }).flow).toBe("paused");
+    // Шов между битами: по донору пробел, в прежнем режиме пустая строка.
+    expect(flowGap("continuous")).toBe(" ");
+    expect(flowGap("paused")).toBe(STORY.eleven.beatGap);
+    expect(flowGap(undefined)).toBe(" ");
+  });
+
+  it("точка в конце бита становится запятой, а знак вопроса и многоточие — нет", () => {
+    expect(dotToComma("Это тест.")).toBe("Это тест,");
+    expect(dotToComma('Он сказал "да".')).toBe('Он сказал "да",');
+    expect(dotToComma("А что если нет?")).toBe("А что если нет?");
+    expect(dotToComma("Хватит!")).toBe("Хватит!");
+    // Многоточие — явная пауза автора, её не трогают.
+    expect(dotToComma("Роботу дали нож...")).toBe("Роботу дали нож...");
+  });
+
+  it("в режиме continuous биты сшиты пробелом, и точка стоит только у последнего", () => {
+    const flowing = { voice: parseVoice("eleven:abc"), speed: 1, flow: "continuous", beats };
+    const texts: string[] = storyVoiceTexts(flowing);
+    expect(texts[0]).toBe("Это не хоррор. Это тест,");
+    // Знак вопроса остаётся: там пауза и есть смысл фразы.
+    expect(texts[1]).toBe("А что если нет?");
+    // Последний бит кончается точкой: после него тишина законна.
+    expect(texts[2]).toBe("Нож лучше убрать.");
+    const whole = joinVoiceText(texts, flowGap(flowing.flow));
+    expect(whole).toBe("Это не хоррор. Это тест, А что если нет? Нож лучше убрать.");
+    expect(whole).not.toContain("\n");
+    // В прежнем режиме ничего из этого не происходит.
+    const paused = storyVoiceTexts({ ...flowing, flow: "paused" });
+    expect(paused[0]).toBe("Это не хоррор. Это тест.");
+    expect(joinVoiceText(paused, flowGap("paused"))).toContain("\n\n");
+    // Зритель разметки и растяжек не видит: на экране всегда text бита.
+    expect(splitWords(beats[0].text)).toEqual(["Это", "не", "хоррор.", "Это", "тест."]);
+  });
+
+  it("растяжка живёт только в say и на экран не попадает", () => {
+    const beat = { text: "Это не хоррор. Это тест.", say: "Это не хоррор, это тесст." };
+    const said = voiceTextFor("eleven", beat, { flow: "continuous", last: false });
+    expect(said).toBe("Это не хоррор, это тесст,");
+    expect(cleanText(beat.text)).toBe("Это не хоррор. Это тест.");
+    expect(splitWords(beat.text)).not.toContain("тесст");
+  });
+
+  it("сведение режет паузу до maxGap и сдвигает времена ровно на вырезанное", () => {
+    // Две «фразы» и 0.8 с тишины между ними.
+    const pcm = Buffer.concat([tone(0.5), hush(0.8), tone(0.5)]);
+    const words = [
+      { text: "раз", start: 0.1, end: 0.4 },
+      { text: "два", start: 1.35, end: 1.6 },
+      { text: "три", start: 1.6, end: 1.75 },
+    ];
+    const before = gapStats(pcm);
+    expect(before.count).toBe(1);
+    expect(before.median).toBeCloseTo(0.8, 2);
+
+    const cut = collapseSilence(pcm, words);
+    const maxGap = STORY.collapse.maxGap;
+    expect(maxGap).toBe(0.12);
+    expect(STORY.collapse.xfade).toBe(0.04);
+    // Вырезано ровно то, что было сверх maxGap.
+    expect(cut.removed).toBeCloseTo(0.8 - maxGap, 3);
+    // Дорожка укоротилась ровно на вырезанное, ни на сэмпл больше.
+    expect(pcm.length - cut.pcm.length).toBe(Math.round(48000 * cut.removed) * 2);
+    // Пауз длиннее maxGap в дорожке не осталось.
+    for (const gap of silenceGaps(cut.pcm, { min: 0.02 })) {
+      expect(gap.seconds).toBeLessThanOrEqual(maxGap + 1e-9);
+    }
+    expect(gapStats(cut.pcm).count).toBe(0);
+    // Слова первой фразы не двинулись, слова второй уехали ровно на вырезанное.
+    expect(cut.words[0]).toEqual(words[0]);
+    expect(cut.words[1].start).toBeCloseTo(words[1].start - cut.removed, 3);
+    expect(cut.words[1].end).toBeCloseTo(words[1].end - cut.removed, 3);
+    expect(cut.words[2].start).toBeCloseTo(words[2].start - cut.removed, 3);
+    expect(cut.words[2].text).toBe("три");
+    // Времена не перестали расти.
+    for (let i = 1; i < cut.words.length; i += 1) {
+      expect(cut.words[i].start).toBeGreaterThanOrEqual(cut.words[i - 1].start);
+    }
+  });
+
+  it("дорожка без длинных пауз возвращается как есть", () => {
+    const pcm = Buffer.concat([tone(0.4), hush(0.05), tone(0.4)]);
+    const words = [{ text: "раз", start: 0.1, end: 0.8 }];
+    const cut = collapseSilence(pcm, words);
+    expect(cut.removed).toBe(0);
+    expect(cut.pcm).toBe(pcm);
+    expect(cut.words).toBe(words);
   });
 });
 

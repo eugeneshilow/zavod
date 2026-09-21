@@ -30,9 +30,23 @@ export const STORY = {
     oneShot: 4500,
     // Шов между битами внутри одного запроса: пустая строка — пауза у v3.
     beatGap: "\n\n",
+    // Тот же шов в режиме continuous: один пробел — фраза не кончается.
+    flowGap: " ",
     // У v3 регулятора скорости нет: темп правит atempo, и только в этих краях.
     tempoMin: 0.85,
     tempoMax: 1.15,
+  },
+  // Как сшиты биты в речи. continuous — по донору, без пауз (умолчание).
+  flows: ["continuous", "paused"],
+  // Сведение дорожки в режиме continuous: тишина длиннее maxGap вырезается,
+  // шов склеивается кроссфейдом, паузой считается тишина тише floorDb.
+  collapse: {
+    maxGap: 0.12,
+    xfade: 0.04,
+    frame: 0.01,
+    floorDb: -45,
+    // С какой длины тишина считается слышимой паузой — ею меряют до и после.
+    heard: 0.15,
   },
   // Шов между кусками внутри бита: столько тишины, чтобы фразы не слипались.
   chunkPauseMs: 120,
@@ -107,6 +121,20 @@ export function parseVoice(value) {
   return { engine, name, role: role || null, model: null };
 }
 
+/**
+ * Поток речи: `continuous` — биты сшиты без пауз, как у донора, и это
+ * умолчание новой истории; `paused` — прежняя пауза между битами.
+ * Канон — docs/reels.md, раздел «Поток без пауз».
+ */
+export function parseFlow(value) {
+  if (value === undefined || value === null || value === "") return "continuous";
+  const flow = String(value).trim();
+  if (!STORY.flows.includes(flow)) {
+    throw new Error(`История: flow бывает ${STORY.flows.join(" или ")}, а не «${value}»`);
+  }
+  return flow;
+}
+
 function parseVisual(raw, i) {
   const kind = need(raw?.kind, `beats[${i}].visual.kind`);
   if (!VISUAL_KINDS.includes(kind)) {
@@ -153,6 +181,8 @@ export function parseStory(raw) {
     },
     music: raw?.music || null,
     speed: Number(raw?.speed ?? STORY.speed),
+    // Как сшиты биты в речи: по донору без пауз — умолчание новой истории.
+    flow: parseFlow(raw?.flow),
     sources: Array.isArray(raw?.sources) ? raw.sources : [],
     beats: beats.map((beat, i) => ({
       text: String(need(beat?.text, `beats[${i}].text`)).trim(),
@@ -196,14 +226,35 @@ export function toElevenMarkup(text) {
     .trim();
 }
 
+// Точка в конце фразы для движка — команда «остановись», запятая — «продолжай».
+// Многоточие не трогаем: это явная пауза автора, а не конец предложения.
+const TRAILING_DOT = /(?<!\.)\.(["»)\]]?)$/;
+
+/**
+ * Точка в конце бита становится запятой — так фраза не кончается и пауза за
+ * ней не встаёт. Бит, кончающийся на `?`, `!` или многоточие, остаётся как
+ * есть: там пауза и есть смысл. Канон — docs/reels.md, «Поток без пауз».
+ */
+export function dotToComma(text) {
+  return String(text).replace(TRAILING_DOT, ",$1");
+}
+
+/** Чем сшиты биты в одном тексте для голоса: по донору — пробелом. */
+export function flowGap(flow) {
+  return parseFlow(flow) === "continuous" ? STORY.eleven.flowGap : STORY.eleven.beatGap;
+}
+
 /**
  * Текст, который слышит голос. У ElevenLabs это `say` бита, если он есть, —
  * там числа и латиница написаны словами; разметка переводится на его язык.
  * У SpeechKit и macOS всё как было: их собственная разметка уходит как есть,
  * а чужие аудио-теги вырезаются — иначе голос прочитает их вслух.
  */
-export function voiceTextFor(engine, beat) {
-  if (engine === "eleven") return toElevenMarkup(beat.say ?? beat.text);
+export function voiceTextFor(engine, beat, { flow = "paused", last = true } = {}) {
+  if (engine === "eleven") {
+    const text = toElevenMarkup(beat.say ?? beat.text);
+    return flow === "continuous" && !last ? dotToComma(text) : text;
+  }
   return String(beat.text)
     .replace(AUDIO_TAG, " ")
     .replace(GLUE_PUNCT, "")
@@ -294,10 +345,17 @@ export function elevenTempo(speed) {
  * каждый едет своим. Канон — docs/reels.md.
  */
 export function storyVoiceTexts(story) {
-  return story.beats.map((beat) => voiceTextFor(story.voice.engine, beat));
+  const flow = parseFlow(story.flow);
+  return story.beats.map((beat, i) =>
+    voiceTextFor(story.voice.engine, beat, { flow, last: i === story.beats.length - 1 }),
+  );
 }
 
-/** Один текст на всю историю: между соседними битами пустая строка — пауза у v3. */
+/**
+ * Один текст на всю историю. Шов задаёт `flow`: при `paused` между битами
+ * пустая строка — у v3 это пауза; при `continuous` один пробел — фраза не
+ * кончается, и движку негде вздохнуть. Канон — docs/reels.md.
+ */
 export function joinVoiceText(texts, gap = STORY.eleven.beatGap) {
   return texts.join(gap);
 }
@@ -420,6 +478,118 @@ export function scaleSpans(spans, tempo) {
   const k = Number(tempo);
   if (!Number.isFinite(k) || k <= 0 || Math.abs(k - 1) < 1e-9) return spans;
   return spans.map((w) => ({ text: w.text, start: round3(w.start / k), end: round3(w.end / k) }));
+}
+
+// Дорожка истории живёт сырым PCM s16le 48 kHz моно — по нему и считают тишину.
+const PCM_RATE = 48000;
+
+/**
+ * Куски тишины в сырой дорожке: кадрами по `frame` секунд, тихим считается
+ * кадр, в котором ни один сэмпл не громче `floorDb` от полной шкалы.
+ * Возвращает отрезки в секундах и в сэмплах, от первого к последнему.
+ */
+export function silenceGaps(pcm, opts = {}) {
+  const rate = opts.rate ?? PCM_RATE;
+  const frame = opts.frame ?? STORY.collapse.frame;
+  const floor = 32768 * 10 ** ((opts.floorDb ?? STORY.collapse.floorDb) / 20);
+  const min = opts.min ?? 0;
+  const step = Math.max(1, Math.round(rate * frame));
+  const samples = Math.floor(pcm.length / 2);
+  const gaps = [];
+  const close = (from, to) => {
+    const seconds = (to - from) / rate;
+    if (seconds >= min - 1e-9) {
+      gaps.push({ from, to, start: round3(from / rate), end: round3(to / rate), seconds });
+    }
+  };
+  let run = null;
+  for (let at = 0; at < samples; at += step) {
+    const to = Math.min(samples, at + step);
+    let peak = 0;
+    for (let i = at; i < to; i += 1) {
+      const value = Math.abs(pcm.readInt16LE(i * 2));
+      if (value > peak) peak = value;
+    }
+    if (peak <= floor) {
+      if (run === null) run = at;
+    } else if (run !== null) {
+      close(run, at);
+      run = null;
+    }
+  }
+  if (run !== null) close(run, samples);
+  return gaps;
+}
+
+/** Сколько пауз слышно и какие они: цифры для отчёта, не для решений. */
+export function gapStats(pcm, opts = {}) {
+  const rate = opts.rate ?? PCM_RATE;
+  const heard = opts.heard ?? STORY.collapse.heard;
+  const gaps = silenceGaps(pcm, { ...opts, min: heard });
+  const seconds = gaps.map((g) => g.seconds).sort((a, b) => a - b);
+  const total = pcm.length / 2 / rate;
+  const silent = seconds.reduce((a, b) => a + b, 0);
+  return {
+    count: seconds.length,
+    median: seconds.length === 0 ? 0 : round3(seconds[Math.floor((seconds.length - 1) / 2)]),
+    share: total > 0 ? Math.round((silent / total) * 100) : 0,
+    total: round3(total),
+  };
+}
+
+/**
+ * Сведение дорожки: тишина длиннее `maxGap` укорачивается ровно до `maxGap`,
+ * шов склеивается кроссфейдом `xfade` — иначе на стыке щёлкает. Времена слов
+ * сдвигаются на ту же вырезанную длину: не сдвинуть их значит увести субтитры
+ * вперёд речи ровно на столько, сколько вырезали. Функция чистая: на входе
+ * буфер и времена, на выходе новый буфер и новые времена.
+ * Канон — docs/reels.md, раздел «Поток без пауз».
+ */
+export function collapseSilence(pcm, wordTimes = [], opts = {}) {
+  const rate = opts.rate ?? PCM_RATE;
+  const keep = Math.max(0, Math.round(rate * (opts.maxGap ?? STORY.collapse.maxGap)));
+  const wide = Math.max(0, Math.round(rate * (opts.xfade ?? STORY.collapse.xfade)));
+  const cuts = [];
+  for (const gap of silenceGaps(pcm, opts)) {
+    if (gap.to - gap.from <= keep) continue;
+    cuts.push({ from: gap.from + keep, to: gap.to });
+  }
+  if (cuts.length === 0) {
+    return { pcm, words: wordTimes, removed: 0, cuts: [] };
+  }
+  const parts = [];
+  let at = 0;
+  for (const cut of cuts) {
+    const blend = Math.min(wide, cut.from - at, cut.to - cut.from);
+    parts.push(pcm.subarray(at * 2, (cut.from - blend) * 2));
+    if (blend > 0) {
+      const mix = Buffer.alloc(blend * 2);
+      for (let i = 0; i < blend; i += 1) {
+        const t = (i + 1) / (blend + 1);
+        const left = pcm.readInt16LE((cut.from - blend + i) * 2);
+        const right = pcm.readInt16LE((cut.to - blend + i) * 2);
+        mix.writeInt16LE(Math.round(left * (1 - t) + right * t), i * 2);
+      }
+      parts.push(mix);
+    }
+    at = cut.to;
+  }
+  parts.push(pcm.subarray(at * 2));
+  const spans = cuts.map((cut) => ({ start: cut.from / rate, end: cut.to / rate }));
+  const shift = (time) => {
+    let out = time;
+    for (const span of spans) {
+      if (time >= span.end) out -= span.end - span.start;
+      else if (time > span.start) out -= time - span.start;
+    }
+    return round3(Math.max(0, out));
+  };
+  return {
+    pcm: Buffer.concat(parts),
+    words: wordTimes.map((w) => ({ ...w, start: shift(w.start), end: shift(w.end) })),
+    removed: round3(spans.reduce((sum, s) => sum + (s.end - s.start), 0)),
+    cuts: spans.map((s) => ({ start: round3(s.start), end: round3(s.end) })),
+  };
 }
 
 /**
