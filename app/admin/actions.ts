@@ -26,4 +26,5 @@ export async function setChannelState(formData: FormData): Promise<void> {
     reason: reason.length >= 3 ? reason : `переключено с /admin (${action})`,
   });
   revalidatePath("/admin");
+  revalidatePath("/admin/publish");
 }
