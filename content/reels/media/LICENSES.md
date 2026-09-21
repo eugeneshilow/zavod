@@ -19,3 +19,11 @@
 `typesafe-race.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (TypeSafe AI, ролик запуска, 1:01–1:13, гонка двух терминалов) · цитирование источника новости с указанием автора · 2026-09-21
 `typesafe-chart.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (TypeSafe AI, ролик запуска, 2:09–2:17, график Intelligence / Cost) · цитирование источника новости с указанием автора · 2026-09-21
 `calibration-portrait.png` · https://vibecoding.ru/model-jev (фигура редакции на тёмном поле 9:16, наш прогон Jev 21.09.2026) · своё · 2026-09-21
+
+## jev-viral
+
+`typesafe-intro.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (Diogo Almeida, TypeSafe AI, ролик запуска Jev, 0:00–0:09) · цитирование источника новости с указанием автора · 2026-09-21
+`typesafe-race.mp4` · https://x.com/CompleteSkeptic/status/2099925682726002904 (TypeSafe AI, ролик запуска, 1:01–1:13, гонка двух терминалов) · цитирование источника новости с указанием автора · 2026-09-21
+`doom-demo.mp4` · https://x.com/CompleteSkeptic/status/2099925687465570372 (TypeSafe AI, демо бота Doom на Jev, 0:04–0:16) · цитирование источника новости с указанием автора · 2026-09-21
+`wikiracing-start.mp4` · https://x.com/CompleteSkeptic/status/2099925688925184171 (TypeSafe AI, демо Wikiracing, 0:00–0:08) · цитирование источника новости с указанием автора · 2026-09-21
+`wikiracing-result.mp4` · https://x.com/CompleteSkeptic/status/2099925688925184171 (TypeSafe AI, демо Wikiracing, 1:00–1:08, карточка результата Baseball → Sun) · цитирование источника новости с указанием автора · 2026-09-21

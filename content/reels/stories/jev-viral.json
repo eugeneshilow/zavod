@@ -1,0 +1,72 @@
+{
+  "id": "jev-viral",
+  "title": "Нейросеть, которая молчит",
+  "voice": "eleven:ogi2DyUAKJb7CEdqqvlU",
+  "speed": 1.0,
+  "flow": "continuous",
+  "stability": 0.25,
+  "colors": { "bg": "#111418", "ink": "#F4F1EA", "accent": "#F5B700" },
+  "music": null,
+  "sources": [
+    "https://x.com/CompleteSkeptic/status/2099925682726002904",
+    "https://vibecoding.ru/model-jev",
+    "https://vibecoding.ru/models/jev"
+  ],
+  "beats": [
+    {
+      "text": "Бывший сотрудник OpenAI показал нейросеть, которая не умеет разговаривать.",
+      "say": "[dramatic, animated narrator] Бывший сотрудник ОупенЭй-Ай показал нейросеть, которая не умеет разговаривать!",
+      "visual": { "kind": "video", "src": "jev-viral/typesafe-intro.mp4", "from": 0, "crop": "608:1080:960:0" }
+    },
+    {
+      "text": "Его пост посмотрели почти сорок миллионов раз.",
+      "say": "[excited] Его пост посмотрели почти сорок миллионов раз!",
+      "visual": { "kind": "tweet", "name": "Diogo Almeida", "handle": "@CompleteSkeptic", "text": "After co-inventing ChatGPT, I kept asking myself: why have superhuman chat models not led to AGI? … a new type of frontier AI model that we are releasing today: Jev", "meta": "38,5 млн просмотров · 15.09.2026" }
+    },
+    {
+      "text": "Она не пишет ни слова. Только отвечает: да, нет или какой из вариантов.",
+      "say": "[beat] Она не пишет ни слова. Только отвечает: да, нет или какой из вариантов.",
+      "visual": { "kind": "card", "big": "0 слов", "small": "только выбор из списка и уверенность" }
+    },
+    {
+      "text": "Зато отвечает за долю секунды и стоит четыре цента за миллион слов.",
+      "say": "[listing fast] Зато отвечает за долю секунды и стоит четыре цента за миллион слов!",
+      "visual": { "kind": "video", "src": "jev-viral/typesafe-race.mp4", "from": 6, "crop": "608:1080:120:0" }
+    },
+    {
+      "text": "На ней уже играют в Doom: бот принимает десять решений в секунду за семь долларов в час.",
+      "say": "На ней уже играют в Дум: бот принимает десять решений в секунду за семь долларов в час.",
+      "visual": { "kind": "video", "src": "jev-viral/doom-demo.mp4", "from": 1, "crop": "825:605:165:110" }
+    },
+    {
+      "text": "Гоняет по Википедии наперегонки с большими моделями, выбирая из сотен ссылок.",
+      "say": "Гоняет по Википедии наперегонки с большими моделями, выбирая из сотен ссылок,",
+      "visual": { "kind": "video", "src": "jev-viral/wikiracing-start.mp4", "from": 0, "crop": "1744:1080:0:0" }
+    },
+    {
+      "text": "И обгоняет их в девять раз.",
+      "say": "[intrigued] и обгоняет их в девять раз.",
+      "visual": { "kind": "video", "src": "jev-viral/wikiracing-result.mp4", "from": 2, "crop": "760:1080:40:0" }
+    },
+    {
+      "text": "Судит ответы чат-ботов: совпала с человеком в ста случаях из ста.",
+      "say": "Судит ответы чат-ботов: совпала с человеком в ста случаях из ста.",
+      "visual": { "kind": "card", "big": "100 из 100", "small": "совпадений с человеком, тест LangChain" }
+    },
+    {
+      "text": "Инвесторы дали создателю сорок миллионов долларов.",
+      "say": "[dramatic] Инвесторы дали создателю сорок миллионов долларов.",
+      "visual": { "kind": "card", "big": "$40 млн", "small": "получил TypeSafe AI в первый же день" }
+    },
+    {
+      "text": "Мы проверили её на своей ленте новостей: три решения из четырёх совпали с нашим судьёй.",
+      "say": "Мы проверили её на своей ленте новостей: три решения из четырёх совпали с нашим судьёй.",
+      "visual": { "kind": "card", "big": "3 из 4", "small": "решений совпали с нашим судьёй" }
+    },
+    {
+      "text": "[sighs] Подвох один: там, где нужен текст, она молчит.",
+      "say": "[amused] Подвох один: там, где нужен текст, она молчит.",
+      "visual": { "kind": "video", "src": "jev-viral/typesafe-intro.mp4", "from": 4, "crop": "608:1080:960:0" }
+    }
+  ]
+}
