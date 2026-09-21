@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { breadcrumbFor, type NavNode } from "@/lib/nav-tree";
 
 // Хедер админки: один на все экраны, строится из дерева docs/ (lib/docs.ts,
@@ -37,9 +37,13 @@ function Branch({ node, depth }: { node: NavNode; depth: number }) {
 
 export function TopNav({ tree }: { tree: NavNode }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState<string | null>(null);
-
-  useEffect(() => setOpen(null), [pathname]);
+  // Открытая панель привязана к адресу: сменился адрес — панель закрыта без эффекта.
+  const [panel, setPanel] = useState<{ at: string; href: string | null }>({
+    at: pathname,
+    href: null,
+  });
+  const open = panel.at === pathname ? panel.href : null;
+  const setOpen = (href: string | null) => setPanel({ at: pathname, href });
 
   const chain = breadcrumbFor(tree, pathname);
   const zones = tree.children ?? [];
