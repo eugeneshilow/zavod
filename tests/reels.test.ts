@@ -35,7 +35,9 @@ import {
   scaleSpans,
   silenceGaps,
   splitWords,
+  parseStability,
   storyAudioFilter,
+  storyStability,
   storyTotal,
   storyVoiceKeyParts,
   storyVoiceTexts,
@@ -262,6 +264,27 @@ describe("разметка для ElevenLabs", () => {
       null,
       1.25,
     ]);
+  });
+
+  it("ровность чтения: поле истории старше умолчания канала", () => {
+    // Поля нет — умолчание; поле есть — оно и побеждает, даже если это ноль.
+    expect(parseStability(undefined)).toBe(STORY.eleven.stability);
+    expect(parseStability("")).toBe(STORY.eleven.stability);
+    expect(parseStability(0.25)).toBe(0.25);
+    expect(parseStability(0)).toBe(0);
+    expect(() => parseStability(1.4)).toThrow(/stability/);
+    expect(() => parseStability("тихо")).toThrow(/stability/);
+    // Уровень экспрессии канала записан прямо в файле истории.
+    expect(parseStory(story).stability).toBe(0.25);
+    expect(parseStory({ ...story, stability: undefined }).stability).toBe(STORY.eleven.stability);
+    // И он входит в ключ кеша: сменил ровность — переозвучили.
+    const parsed = parseStory(story);
+    const parts = storyVoiceKeyParts(parsed, "текст");
+    expect(parts).toContain(storyStability(parsed));
+    expect(storyVoiceKeyParts({ ...parsed, stability: 0.55 }, "текст")).not.toEqual(parts);
+    expect(
+      voiceCacheParts({ ...parsed, stability: 0.55 }, { text: "Раз.", say: null }),
+    ).not.toEqual(voiceCacheParts(parsed, { text: "Раз.", say: null }));
   });
 
   it("скорость у v3 подрезается до краёв: высоту голоса не трогаем", () => {

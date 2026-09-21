@@ -37,6 +37,7 @@ import {
   scaleSpans,
   stillFilter,
   storyAudioFilter,
+  storyStability,
   storyTotal,
   storyVoiceKeyParts,
   storyVoiceTexts,
@@ -265,9 +266,9 @@ function retempoPcm(pcm, tempo, dir) {
  * `audio_base64` и `alignment` (символы, начала, концы). `previous_text` и
  * `next_text` — соседние куски сценария: по ним движок держит интонацию на шве.
  */
-async function elevenAskTimed(voice, text, speed, key, format, context = {}) {
+async function elevenAskTimed(voice, text, speed, stability, key, format, context = {}) {
   const isV3 = voice.model === STORY.eleven.model;
-  const settings = { stability: STORY.eleven.stability };
+  const settings = { stability };
   // У v3 регулятора скорости нет — её правит atempo; у v2 скорость своя.
   if (!isV3) settings.speed = speed;
   const body = {
@@ -302,18 +303,18 @@ async function elevenAskTimed(voice, text, speed, key, format, context = {}) {
 }
 
 /** Тот же запрос, но с одной повторной попыткой при отказе ПО ФОРМАТУ звука. */
-async function elevenTimed(voice, text, speed, key, dir, context) {
+async function elevenTimed(voice, text, speed, stability, key, dir, context) {
   let format = elevenFormat || ELEVEN_PCM;
   let answer;
   try {
-    answer = await elevenAskTimed(voice, text, speed, key, format, context);
+    answer = await elevenAskTimed(voice, text, speed, stability, key, format, context);
   } catch (error) {
     // Всё, кроме формата (тариф, ключ, сеть), летит человеку как есть: вторая
     // попытка тем же запросом только сожгла бы кредиты.
     const aboutFormat = [400, 422].includes(error.status);
     if (!aboutFormat || elevenFormat || format === ELEVEN_MP3) throw error;
     format = ELEVEN_MP3;
-    answer = await elevenAskTimed(voice, text, speed, key, format, context);
+    answer = await elevenAskTimed(voice, text, speed, stability, key, format, context);
   }
   elevenFormat = format;
   return {
@@ -374,6 +375,7 @@ export async function elevenStoryVoice(story, dir, { collapse } = {}) {
         story.voice,
         joinVoiceText(pieces, gap),
         story.speed,
+        storyStability(story),
         key,
         dir,
         {
@@ -738,6 +740,7 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
     drift,
     voice: story.voice,
     speed: story.speed,
+    stability: storyStability(story),
     flow: story.flow,
     // Сколько пауз было и стало и сколько секунд вырезано — только у eleven.
     gaps: sound.gaps || null,
@@ -762,7 +765,9 @@ export function report(r) {
     `  voice: ${r.voice.engine}:${r.voice.name}${r.voice.role ? `:${r.voice.role}` : ""}` +
       `${r.voice.model ? ` · модель ${r.voice.model}` : ""}` +
       `${r.format ? ` · формат ${r.format}` : ""}` +
-      ` · скорость ${r.speed}${r.voice.engine === "say" ? " (черновик: озвучить живым движком)" : ""}` +
+      ` · скорость ${r.speed}` +
+      `${r.voice.engine === "eleven" ? ` · ровность ${r.stability}` : ""}` +
+      `${r.voice.engine === "say" ? " (черновик: озвучить живым движком)" : ""}` +
       ` · ${r.music ? `music ${path.basename(r.music)}` : "музыки нет"} · субтитры ${r.subs}`,
     r.oneShot
       ? `  озвучено ${r.resynth ? "заново" : "из кеша"} · вся история ${r.requests} запросом(ами)` +
