@@ -485,11 +485,13 @@ export function storyAudioFilter(total, hasMusic, opts = {}) {
   const db = opts.musicDb ?? STORY.musicDb;
   const fade = opts.fadeSeconds ?? STORY.fadeSeconds;
   const fadeAt = round3(Math.max(0, total - fade));
-  const voice = `[1:a]aresample=48000,apad,atrim=0:${total},asetpts=N/SR/TB`;
+  // Времена звука не переписываются счётчиком сэмплов: с входом concat
+  // `asetpts=N/SR/TB` сминает часть дорожки в одну точку (см. docs/reels.md).
+  const voice = `[1:a]aresample=48000,apad,atrim=0:${total}`;
   if (!hasMusic) return `${voice}[aout]`;
   return (
     `${voice}[va];` +
-    `[2:a]aresample=48000,volume=${db}dB,apad,atrim=0:${total},asetpts=N/SR/TB,` +
+    `[2:a]aresample=48000,volume=${db}dB,apad,atrim=0:${total},` +
     `afade=t=out:st=${fadeAt}:d=${fade}[ma];` +
     `[va][ma]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`
   );

@@ -398,15 +398,15 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
   mkdirSync(framesDir, { recursive: true });
   mkdirSync(clipsDir, { recursive: true });
 
-  const voice = await voiceByBeats(story, dir);
-  const heardByBeat = hearByBeats(voice.files, voice.bounds, dir);
-  const layout = layoutBeats(story.beats, heardByBeat, voice.bounds);
+  const sound = await voiceByBeats(story, dir);
+  const heardByBeat = hearByBeats(sound.files, sound.bounds, dir);
+  const layout = layoutBeats(story.beats, heardByBeat, sound.bounds);
   const total = storyTotal(layout);
   const durations = clipDurations(layout, total);
   const words = flatWords(layout);
   const heardCount = heardByBeat.reduce((sum, list) => sum + list.length, 0);
   const drift = wordDrift(words.length, heardCount);
-  const wav = voice.wav;
+  const wav = sound.wav;
 
   writeFileSync(
     path.join(dir, "beats.json"),
@@ -466,7 +466,7 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
     out: target,
     beats: story.beats.length,
     byWhisper: layout.filter((beat) => beat.byWhisper).length,
-    resynth: voice.fresh,
+    resynth: sound.fresh,
     words: words.length,
     heard: heardCount,
     drift,

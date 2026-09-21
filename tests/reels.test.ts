@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   SECONDS,
+  audioFilter,
   buildXfadeFilter,
   parseSeries,
   renderSlideHtml,
@@ -21,6 +22,7 @@ import {
   parseStory,
   parseVoice,
   splitWords,
+  storyAudioFilter,
   storyTotal,
   trustHeard,
   wordDrift,
@@ -172,6 +174,17 @@ describe("куски для голоса", () => {
   });
 });
 
+describe("дорожка звука", () => {
+  it("звук не переписывает свои времена счётчиком сэмплов", () => {
+    // asetpts=N/SR/TB рядом с видео из склейки сминает часть дорожки в точку.
+    expect(storyAudioFilter(66.494, false)).not.toContain("asetpts");
+    expect(storyAudioFilter(66.494, true)).not.toContain("asetpts");
+    expect(audioFilter(27, false)).not.toContain("asetpts");
+    expect(audioFilter(27, true)).not.toContain("asetpts");
+    expect(storyAudioFilter(66.494, false)).toContain("atrim=0:66.494");
+  });
+});
+
 describe("границы битов", () => {
   it("границы равны накопленным длинам звука плюс паузы между битами", () => {
     const bounds = beatBounds([2, 1.5, 3]);
@@ -182,7 +195,7 @@ describe("границы битов", () => {
       start: 2 + pause + 1.5 + pause,
       end: 2 + pause + 1.5 + pause + 3,
     });
-    // Паузa не принадлежит ни одному биту: между ними ровно её длина.
+    // Пауза не принадлежит ни одному биту: между ними ровно её длина.
     expect(bounds[1].start - bounds[0].end).toBeCloseTo(pause, 6);
     expect(bounds[2].start - bounds[1].end).toBeCloseTo(pause, 6);
   });

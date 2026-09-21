@@ -152,11 +152,10 @@ export function buildXfadeFilter(slides, xfade = SECONDS.xfade) {
 export function audioFilter(total, hasMusic, inputIndex = 1, fadeSeconds = 1.5) {
   const fadeAt = round3(Math.max(0, total - fadeSeconds));
   const head = `[${inputIndex}:a]aresample=48000`;
-  if (!hasMusic) return `${head},atrim=0:${total},asetpts=N/SR/TB[aout]`;
-  return (
-    `${head},apad,atrim=0:${total},asetpts=N/SR/TB,` +
-    `afade=t=out:st=${fadeAt}:d=${fadeSeconds}[aout]`
-  );
+  // Времена звука не переписываются счётчиком сэмплов (`asetpts=N/SR/TB`):
+  // он ломает дорожку, когда видео приходит склейкой. Канон — docs/reels.md.
+  if (!hasMusic) return `${head},atrim=0:${total}[aout]`;
+  return `${head},apad,atrim=0:${total},afade=t=out:st=${fadeAt}:d=${fadeSeconds}[aout]`;
 }
 
 /** Аргументы входа звука: сам трек либо генератор тишины нужной длины. */
