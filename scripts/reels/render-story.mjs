@@ -30,7 +30,7 @@ import {
   parseStory,
   parseVoice,
   rangesInAlignment,
-  scaleAlignment,
+  scaleSpans,
   stillFilter,
   storyAudioFilter,
   storyTotal,
@@ -354,6 +354,8 @@ export async function elevenStoryVoice(story, dir) {
 
   let fresh = 0;
   if (!saved?.spans) {
+    // В кеш ложится звук и времена ДО темпа: atempo применяется на выходе,
+    // поэтому подбор скорости не стоит ни одного кредита.
     const groups = groupBeatsByLimit(texts);
     const pause = Buffer.alloc(Math.round(PCM_RATE * STORY.beatPause) * 2);
     const parts = [];
@@ -367,29 +369,36 @@ export async function elevenStoryVoice(story, dir) {
       });
       if (parts.length > 0) {
         parts.push(pause);
-        at = round3(at + STORY.beatPause / tempo);
+        at = round3(at + STORY.beatPause);
       }
       parts.push(answer.pcm);
-      // Темп правит дорожку целиком, значит и времена делятся на тот же коэффициент.
-      const aligned = scaleAlignment(answer.alignment, tempo);
-      const ranges = rangesInAlignment(aligned, pieces);
+      const ranges = rangesInAlignment(answer.alignment, pieces);
       for (const [k, i] of group.entries()) {
         const offset = at;
-        spans[i] = wordSpans(aligned, ranges[k]).map((w) => ({
+        spans[i] = wordSpans(answer.alignment, ranges[k]).map((w) => ({
           text: w.text,
           start: round3(w.start + offset),
           end: round3(w.end + offset),
         }));
       }
-      at = round3(at + secondsOfPcm(answer.pcm.length) / tempo);
+      at = round3(at + secondsOfPcm(answer.pcm.length));
     }
-    writeFileSync(raw, retempoPcm(Buffer.concat(parts), tempo, voiceDir));
-    saved = { spans, groups: groups.length, format: elevenFormat, tempo };
+    writeFileSync(raw, Buffer.concat(parts));
+    saved = { spans, groups: groups.length, format: elevenFormat };
     writeFileSync(meta, `${JSON.stringify(saved, null, 2)}\n`);
     fresh = 1;
   }
-  run("ffmpeg", ["-y", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", "-i", raw, wav]);
-  return { kind: "aligned", wav, spansByBeat: saved.spans, groups: saved.groups, fresh };
+  // Темп — последним шагом, и к звуку, и к временам слов сразу.
+  const tuned = path.join(dir, "voice.pcm");
+  writeFileSync(tuned, retempoPcm(readFileSync(raw), tempo, voiceDir));
+  run("ffmpeg", ["-y", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", "-i", tuned, wav]);
+  return {
+    kind: "aligned",
+    wav,
+    spansByBeat: saved.spans.map((list) => scaleSpans(list, tempo)),
+    groups: saved.groups,
+    fresh,
+  };
 }
 
 /** Звук одного бита в PCM s16le 48 kHz моно — что бы его ни произносило. */
@@ -718,6 +727,15 @@ export function report(r) {
       : `  озвучено заново битов ${r.resynth} из ${r.beats} · время слов от whisper` +
         ` в ${r.byWhisper} битах, в остальных по буквам`,
   ];
+  // Ролик длиннее минуты не останавливает сборку, но о нём говорят вслух:
+  // лечится он короче написанным текстом, а не ускорением голоса.
+  if (r.expected > STORY.maxSeconds) {
+    const cut = Math.max(1, Math.round(r.words - (STORY.maxSeconds / 60) * wpm));
+    lines.push(
+      `  ⚠️ ролик ${r.expected.toFixed(1)} с — длиннее ${STORY.maxSeconds} с:` +
+        ` убери около ${cut} слов (ориентир — ${STORY.targetWords} слов на ролик)`,
+    );
+  }
   if (r.tempo !== undefined && Math.abs(r.tempo - r.speed) > 1e-4) {
     lines.push(
       `  ⚠️ скорость ${r.speed} вне краёв ${STORY.eleven.tempoMin}–${STORY.eleven.tempoMax}:` +

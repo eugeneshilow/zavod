@@ -9,6 +9,10 @@ import { FPS, escapeHtml, templateHead } from "./lib.mjs";
 /** Постоянные истории: хвост после последнего слова, темп донора, вид субтитров. */
 export const STORY = {
   tail: 0.6,
+  // Ролик истории — до минуты: столько у донора и столько берёт YouTube Shorts.
+  // Ориентир при письме — столько слов текста: наш темп даёт 110–120 слов/мин.
+  maxSeconds: 60,
+  targetWords: 110,
   donorWpm: 160,
   sayRate: 170,
   // SpeechKit читает медленнее донора: 1.0 даёт ~115 слов в минуту.
@@ -300,12 +304,15 @@ export function joinVoiceText(texts, gap = STORY.eleven.beatGap) {
 
 /**
  * Ключ звука всей истории: у ElevenLabs она озвучивается одним куском, поэтому
- * в ключ входит весь текст для голоса, сам голос, модель, stability и скорость.
- * Правка одного бита меняет ключ целиком — так и задумано. Канон — docs/reels.md.
+ * в ключ входит весь текст для голоса, сам голос, модель и stability. Правка
+ * одного бита меняет ключ целиком — так и задумано. Скорости у v3 в ключе НЕТ:
+ * её правит atempo уже по готовому звуку, значит подбор темпа не стоит ни
+ * одного кредита. У v2 скорость — параметр запроса, и в ключ она идёт.
  */
 export function storyVoiceKeyParts(story, text) {
   const { engine, name, model } = story.voice;
-  return [text, engine, name, model ?? null, STORY.eleven.stability, story.speed];
+  const isV3 = model === STORY.eleven.model;
+  return [text, engine, name, model ?? null, STORY.eleven.stability, isV3 ? null : story.speed];
 }
 
 /**
@@ -405,19 +412,14 @@ export function rangesInAlignment(alignment, texts) {
 }
 
 /**
- * Темп меняет всю дорожку целиком, значит и времена таймкодов делятся на тот же
+ * Темп меняет всю дорожку целиком, значит и времена слов делятся на тот же
  * коэффициент: ускорили звук в 1.15 раза — все времена стали в 1.15 раза раньше.
+ * В кеше лежат времена ДО темпа, поэтому подбор темпа не стоит кредитов.
  */
-export function scaleAlignment(alignment, tempo) {
+export function scaleSpans(spans, tempo) {
   const k = Number(tempo);
-  if (!Number.isFinite(k) || k <= 0 || Math.abs(k - 1) < 1e-9) return alignment;
-  return {
-    characters: alignment.characters,
-    character_start_times_seconds: alignment.character_start_times_seconds.map((t) =>
-      round3(t / k),
-    ),
-    character_end_times_seconds: alignment.character_end_times_seconds.map((t) => round3(t / k)),
-  };
+  if (!Number.isFinite(k) || k <= 0 || Math.abs(k - 1) < 1e-9) return spans;
+  return spans.map((w) => ({ text: w.text, start: round3(w.start / k), end: round3(w.end / k) }));
 }
 
 /**

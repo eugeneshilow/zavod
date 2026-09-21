@@ -27,7 +27,7 @@ import {
   parseStory,
   parseVoice,
   rangesInAlignment,
-  scaleAlignment,
+  scaleSpans,
   splitWords,
   storyAudioFilter,
   storyTotal,
@@ -41,7 +41,7 @@ import {
   wordDrift,
   wordSpans,
 } from "@/scripts/reels/story.mjs";
-import { elevenError } from "@/scripts/reels/render-story.mjs";
+import { elevenError, report } from "@/scripts/reels/render-story.mjs";
 
 const template = readFileSync("content/reels/template.html", "utf8");
 const words = JSON.parse(readFileSync("content/reels/series/01-words-agent-uses.json", "utf8"));
@@ -321,7 +321,6 @@ describe("вся история одним запросом к ElevenLabs", () =
     // Правка одного бита меняет ключ всей истории — так и задумано.
     const other = joinVoiceText([texts[0], "Другой текст."]);
     expect(storyVoiceKeyParts(parsed, other)).not.toEqual(parts);
-    expect(storyVoiceKeyParts({ ...parsed, speed: 1.1 }, whole)).not.toEqual(parts);
   });
 
   it("отрезки тегов выбрасываются: они не звучат", () => {
@@ -391,15 +390,26 @@ describe("вся история одним запросом к ElevenLabs", () =
     expect(mapWordsToSpans(Array(50).fill("x"), spans, { start: 1, end: 2 })).toBeNull();
   });
 
-  it("atempo двигает и времена: дорожку ускорили — таймкоды поехали раньше", () => {
-    const align = alignOf("Раз два.");
-    const fast = scaleAlignment(align, STORY.eleven.tempoMax);
-    expect(scaleAlignment(align, 1)).toBe(align);
-    expect(fast.character_start_times_seconds[4]).toBeCloseTo(0.4 / 1.15, 3);
-    expect(fast.character_end_times_seconds.at(-1)!).toBeCloseTo(0.8 / 1.15, 3);
-    const slow = wordSpans(scaleAlignment(align, STORY.eleven.tempoMin));
-    expect(slow[0].start).toBeCloseTo(0, 6);
-    expect(slow.at(-1)!.end).toBeCloseTo(0.8 / 0.85, 2);
+  it("atempo двигает и времена: дорожку ускорили — слова поехали раньше", () => {
+    const spans = wordSpans(alignOf("Раз два."));
+    const fast = scaleSpans(spans, STORY.eleven.tempoMax);
+    expect(scaleSpans(spans, 1)).toBe(spans);
+    expect(fast[0].start).toBeCloseTo(0, 6);
+    expect(fast.at(-1)!.end).toBeCloseTo(0.8 / 1.15, 3);
+    expect(scaleSpans(spans, STORY.eleven.tempoMin).at(-1)!.end).toBeCloseTo(0.8 / 0.85, 3);
+    // Слова остаются собой: меняются только времена.
+    expect(fast.map((w: Word) => w.text)).toEqual(spans.map((w: Word) => w.text));
+  });
+
+  it("скорость не входит в ключ кеша у v3: подбор темпа не стоит кредитов", () => {
+    const at1 = storyVoiceKeyParts({ ...parsed, speed: 1.0 }, whole);
+    const at11 = storyVoiceKeyParts({ ...parsed, speed: 1.1 }, whole);
+    expect(at11).toEqual(at1);
+    // У v2 скорость — параметр запроса, значит в ключ она идёт.
+    const v2 = { voice: parseVoice("eleven:abc:v2"), speed: 1.0, beats };
+    expect(storyVoiceKeyParts({ ...v2, speed: 1.1 }, whole)).not.toEqual(
+      storyVoiceKeyParts(v2, whole),
+    );
   });
 
   it("сценарий длиннее предела режется по границам битов", () => {
@@ -408,6 +418,49 @@ describe("вся история одним запросом к ElevenLabs", () =
     // Бит длиннее предела целиком остаётся в своём куске: пополам не рвём.
     expect(groupBeatsByLimit(["а".repeat(20), "б"], 8)).toEqual([[0], [1]]);
     expect(groupBeatsByLimit(texts)).toEqual([[0, 1]]);
+  });
+});
+
+describe("длина ролика истории", () => {
+  /** Отчёт рендера на выдуманном исходе: длину и слова задаём сами. */
+  const reportOf = (expected: number, words: number) =>
+    report({
+      id: "x",
+      title: "т",
+      out: "out/x.mp4",
+      beats: 16,
+      oneShot: true,
+      requests: 1,
+      byWhisper: 0,
+      byAlignment: 16,
+      resynth: 1,
+      words,
+      heard: words,
+      drift: 0,
+      voice: parseVoice("eleven:abc"),
+      speed: 1,
+      tempo: 1,
+      format: "pcm_48000",
+      music: null,
+      subs: "out/x.ass",
+      expected,
+      info: { duration: expected, width: 1080, height: 1920, sizeMb: "9", audio: "aac" },
+    });
+
+  it("ролик длиннее минуты — предупреждение, а не падение", () => {
+    expect(STORY.maxSeconds).toBe(60);
+    const long = reportOf(78.4, 149);
+    expect(long).toContain("длиннее 60 с");
+    expect(long).toContain("убери около");
+    expect(reportOf(54.2, 110)).not.toContain("длиннее");
+  });
+
+  it("сценарий robot-knife укладывается в ориентир по словам", () => {
+    const count = parseStory(story)
+      .beats.map((beat: { text: string }) => splitWords(beat.text).length)
+      .reduce((a: number, b: number) => a + b, 0);
+    expect(count).toBeLessThanOrEqual(STORY.targetWords + 10);
+    expect(STORY.targetWords).toBe(110);
   });
 });
 
