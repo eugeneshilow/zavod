@@ -109,7 +109,7 @@ npx convex run workflows/instagram_publishing:runQueue '{}' --prod
 ```
 
 Id строк — колонка `_id` в `npx convex data data_cooked_instagram_reels --prod`
-или блок «Очередь» на `/admin`. Гейты те же, что у крона: рубильники, тумблер
+или блок «Очередь» на `/admin/publish`. Гейты те же, что у крона: рубильники, тумблер
 двери, ключи. Строки не в `approved` команда пропускает и называет.
 
 ## Повтор после сбоя
@@ -146,7 +146,7 @@ Id строк — колонка `_id` в `npx convex data data_cooked_instagram
   `INSTAGRAM_APP_SECRET`, `ADMIN_API_TOKEN`, `TELEGRAM_BOT_TOKEN`,
   `TELEGRAM_CHAT_ID`.
 - **Vercel (production)**: `ADMIN_API_TOKEN` — тем же значением, что в Convex.
-  Этим токеном страница `/admin` и проверка `/api/reels/health` спрашивают у
+  Этим токеном экраны админки и проверка `/api/reels/health` спрашивают у
   Convex очередь и эфир.
 - Локально те же имена — в `main/.env.local`.
 
@@ -211,7 +211,7 @@ Variables (Production). Когда очередь проверена на одн
 
 ## Стекло
 
-Страница `/admin` (за паролем) несёт два блока сверху:
+Экран `/admin/publish` (за паролем; адрес — зеркало этого файла, [admin.md](admin.md)) несёт два блока сверху, а на `/admin` от них остаются две карточки пульса:
 
 - **Очередь Reels** — строки очереди: статус, дверь, аккаунт, вид (ролик или
   картинка), подпись, план и факт, число попыток, текст ошибки. У опубликованной
