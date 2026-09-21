@@ -23,7 +23,7 @@ describe("/admin", () => {
     expect(res.status).toBe(401);
   });
 
-  it("с паролем показывает первое решение в списке решений", async () => {
+  it("с паролем показывает двери зон хедера", async () => {
     const password = envPassword();
     process.env.ADMIN_PASSWORD = password;
     const auth = "Basic " + Buffer.from(`user:${password}`).toString("base64");
@@ -32,8 +32,9 @@ describe("/admin", () => {
     );
     expect(res.status).toBe(200);
     const html = renderToStaticMarkup(await Admin());
-    const list = html.match(/<ul[^>]*data-testid="decisions"[^>]*>([\s\S]*?)<\/ul>/);
-    expect(list).not.toBeNull();
-    expect(list![1]).toContain("adopt-spec-driven-company");
+    const zones = html.match(/<div[^>]*data-testid="zones"[^>]*>([\s\S]*?)<\/section>/);
+    expect(zones).not.toBeNull();
+    expect(zones![1]).toContain('href="/admin/brains"');
+    expect(zones![1]).toContain('href="/admin/social"');
   });
 });
