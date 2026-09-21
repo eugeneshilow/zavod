@@ -9,6 +9,10 @@ import { FPS, escapeHtml, templateHead } from "./lib.mjs";
 /** Постоянные истории: хвост после последнего слова, темп донора, вид субтитров. */
 export const STORY = {
   tail: 0.6,
+  // Ролик истории — до минуты: столько у донора и столько берёт YouTube Shorts.
+  // Ориентир при письме — столько слов текста: наш темп даёт 110–120 слов/мин.
+  maxSeconds: 60,
+  targetWords: 110,
   donorWpm: 160,
   sayRate: 170,
   // SpeechKit читает медленнее донора: 1.0 даёт ~115 слов в минуту.
@@ -21,8 +25,11 @@ export const STORY = {
     modelV2: "eleven_multilingual_v2",
     stability: 0.55,
     language: "ru",
-    // Один запрос v3 берёт до 5000 знаков — наши биты короче с запасом.
-    chunk: 4800,
+    // Один запрос берёт до 5000 знаков: вся история уходит одним куском,
+    // сценарий длиннее — режется по границам битов (запасной путь).
+    oneShot: 4500,
+    // Шов между битами внутри одного запроса: пустая строка — пауза у v3.
+    beatGap: "\n\n",
     // У v3 регулятора скорости нет: темп правит atempo, и только в этих краях.
     tempoMin: 0.85,
     tempoMax: 1.15,
@@ -279,6 +286,208 @@ export function elevenTempo(speed) {
   const wanted = Number(speed);
   if (!Number.isFinite(wanted) || wanted <= 0) return 1;
   return Math.min(tempoMax, Math.max(tempoMin, wanted));
+}
+
+/**
+ * Тексты битов для голоса по порядку — по одному на бит. У ElevenLabs они
+ * склеиваются в один текст и уходят одним запросом; у остальных движков
+ * каждый едет своим. Канон — docs/reels.md.
+ */
+export function storyVoiceTexts(story) {
+  return story.beats.map((beat) => voiceTextFor(story.voice.engine, beat));
+}
+
+/** Один текст на всю историю: между соседними битами пустая строка — пауза у v3. */
+export function joinVoiceText(texts, gap = STORY.eleven.beatGap) {
+  return texts.join(gap);
+}
+
+/**
+ * Ключ звука всей истории: у ElevenLabs она озвучивается одним куском, поэтому
+ * в ключ входит весь текст для голоса, сам голос, модель и stability. Правка
+ * одного бита меняет ключ целиком — так и задумано. Скорости у v3 в ключе НЕТ:
+ * её правит atempo уже по готовому звуку, значит подбор темпа не стоит ни
+ * одного кредита. У v2 скорость — параметр запроса, и в ключ она идёт.
+ */
+export function storyVoiceKeyParts(story, text) {
+  const { engine, name, model } = story.voice;
+  const isV3 = model === STORY.eleven.model;
+  return [text, engine, name, model ?? null, STORY.eleven.stability, isV3 ? null : story.speed];
+}
+
+/**
+ * Сценарий длиннее предела режется на куски ПО ГРАНИЦАМ БИТОВ — бит целиком
+ * остаётся в одном запросе. Возвращает номера битов по кускам. Запасной путь:
+ * между кусками слышен шов. Канон — docs/reels.md.
+ */
+export function groupBeatsByLimit(texts, limit = STORY.eleven.oneShot, gap = STORY.eleven.beatGap) {
+  const groups = [];
+  let current = [];
+  let length = 0;
+  for (const [i, text] of texts.entries()) {
+    const add = current.length === 0 ? text.length : gap.length + text.length;
+    if (current.length > 0 && length + add > limit) {
+      groups.push(current);
+      current = [i];
+      length = text.length;
+      continue;
+    }
+    current.push(i);
+    length += add;
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
+/**
+ * Какие символы текста — аудио-тег `[…]`. В таймкодах у тега свой отрезок
+ * времени, хотя вслух он не звучит: его выбрасывают, иначе первое слово встанет
+ * на экран раньше речи.
+ */
+export function tagMask(text) {
+  const mask = new Array(text.length).fill(false);
+  let open = -1;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === "[") open = i;
+    else if (text[i] === "]" && open >= 0) {
+      for (let j = open; j <= i; j += 1) mask[j] = true;
+      open = -1;
+    }
+  }
+  return mask;
+}
+
+/**
+ * Слова куска текста со временами их символов: слово идёт от первого своего
+ * символа до последнего. Отрезки тегов выброшены, а кусок без единой буквы и
+ * цифры (например многоточие-пауза) словом не считается.
+ */
+export function wordSpans(alignment, range) {
+  const chars = alignment.characters;
+  const starts = alignment.character_start_times_seconds;
+  const ends = alignment.character_end_times_seconds;
+  const from = range?.start ?? 0;
+  const to = range?.end ?? chars.length;
+  const text = chars.slice(from, to).join("");
+  const mask = tagMask(text);
+  const spans = [];
+  let current = null;
+  for (let i = 0; i < text.length; i += 1) {
+    if (mask[i] || /\s/.test(text[i])) {
+      if (current) spans.push(current);
+      current = null;
+      continue;
+    }
+    if (current) {
+      current.text += text[i];
+      current.end = Math.max(current.end, ends[from + i]);
+    } else {
+      current = { text: text[i], start: starts[from + i], end: ends[from + i] };
+    }
+  }
+  if (current) spans.push(current);
+  return spans
+    .filter((w) => /[\p{L}\p{N}]/u.test(w.text))
+    .map((w) => ({ text: w.text, start: round3(w.start), end: round3(w.end) }));
+}
+
+/**
+ * Где в таймкодах лежит текст каждого бита. Движок возвращает символы того
+ * текста, который мы отправили, поэтому каждый бит ищется по порядку от места,
+ * где кончился предыдущий.
+ */
+export function rangesInAlignment(alignment, texts) {
+  const joined = alignment.characters.join("");
+  const ranges = [];
+  let at = 0;
+  for (const [i, text] of texts.entries()) {
+    const found = joined.indexOf(text, at);
+    if (found < 0) {
+      throw new Error(`История: ElevenLabs вернул таймкоды без текста бита ${i + 1}`);
+    }
+    ranges.push({ start: found, end: found + text.length });
+    at = found + text.length;
+  }
+  return ranges;
+}
+
+/**
+ * Темп меняет всю дорожку целиком, значит и времена слов делятся на тот же
+ * коэффициент: ускорили звук в 1.15 раза — все времена стали в 1.15 раза раньше.
+ * В кеше лежат времена ДО темпа, поэтому подбор темпа не стоит кредитов.
+ */
+export function scaleSpans(spans, tempo) {
+  const k = Number(tempo);
+  if (!Number.isFinite(k) || k <= 0 || Math.abs(k - 1) < 1e-9) return spans;
+  return spans.map((w) => ({ text: w.text, start: round3(w.start / k), end: round3(w.end / k) }));
+}
+
+/**
+ * Слова экрана на честные времена слов голоса. Их число обычно не совпадает:
+ * зритель видит «97», а голос говорит «девяносто семь». Поэтому слова экрана
+ * раскладываются по словам голоса по счёту — j-е из n встаёт туда, где начинается
+ * слово голоса номер j×m/n. Слова не влезли с минимальной длиной — null,
+ * и раскладка уходит на буквы.
+ */
+export function mapWordsToSpans(words, spans, bound, min = STORY.minWord) {
+  const n = words.length;
+  const m = spans.length;
+  if (n === 0 || m === 0) return null;
+  const starts = [];
+  let cursor = bound.start;
+  for (let j = 0; j < n; j += 1) {
+    const span = spans[Math.min(m - 1, Math.floor((j * m) / n))];
+    const want = Math.min(Math.max(span.start, bound.start), bound.end);
+    const start = Math.max(cursor, want);
+    starts.push(start);
+    cursor = start + min;
+  }
+  if (cursor > bound.end + 1e-9) return null;
+  return starts.map((start, j) => ({
+    text: words[j],
+    start: round3(start),
+    end: round3(j + 1 < n ? starts[j + 1] : bound.end),
+  }));
+}
+
+/**
+ * Раскладка по таймкодам ElevenLabs: граница бита — от первого до последнего
+ * звучащего символа его куска, время слова — оттуда же. Распознавание здесь не
+ * участвует вовсе. Инвариант тот же, что у layoutBeats: времена строго
+ * возрастают, слово не короче STORY.minWord, конец последнего слова бита равен
+ * концу бита.
+ */
+export function layoutFromAlignment(beats, spansByBeat) {
+  let prev = 0;
+  return beats.map((beat, i) => {
+    const words = splitWords(beat.text);
+    const spans = spansByBeat[i] || [];
+    const bound =
+      spans.length > 0
+        ? { start: spans[0].start, end: spans[spans.length - 1].end }
+        : { start: prev, end: round3(prev + Math.max(0.05, words.length * STORY.minWord)) };
+    prev = bound.end;
+    let out = mapWordsToSpans(words, spans, bound);
+    const aligned = Boolean(out);
+    if (!out) {
+      const seconds = Math.max(0.05, bound.end - bound.start);
+      const fitted = fitDurations(letterDurations(words, seconds), seconds);
+      let at = bound.start;
+      out = words.map((text, j) => {
+        const start = round3(at);
+        at = j === words.length - 1 ? bound.end : at + fitted[j];
+        return { text, start, end: round3(at) };
+      });
+    }
+    return {
+      index: i,
+      start: round3(bound.start),
+      end: round3(bound.end),
+      byWhisper: false,
+      byAlignment: aligned,
+      words: out,
+    };
+  });
 }
 
 /**
