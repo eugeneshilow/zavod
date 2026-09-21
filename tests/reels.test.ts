@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   SECONDS,
+  audioFilter,
   buildXfadeFilter,
   parseSeries,
   renderSlideHtml,
@@ -9,17 +10,21 @@ import {
 } from "@/scripts/reels/lib.mjs";
 import {
   STORY,
+  beatBounds,
   buildAss,
   clipDurations,
+  fitDurations,
   flatWords,
   layoutBeats,
   chunkText,
   cleanText,
+  letterDurations,
   parseStory,
   parseVoice,
   splitWords,
-  storyText,
+  storyAudioFilter,
   storyTotal,
+  trustHeard,
   wordDrift,
 } from "@/scripts/reels/story.mjs";
 
@@ -86,13 +91,24 @@ describe("тайминг", () => {
 const story = JSON.parse(readFileSync("content/reels/stories/robot-knife.json", "utf8"));
 
 type Word = { text: string; start: number; end: number };
+type Bound = { start: number; end: number };
 
-/** Услышанные машиной слова: ровный ряд по секунде на слово. */
-function heard(count: number, step = 1): Word[] {
+/** Честные слова whisper внутри бита: ровный ряд, ни одного нулевой длины. */
+function heardIn(bound: Bound, count: number): Word[] {
+  const step = (bound.end - bound.start) / count;
   return Array.from({ length: count }, (_, i) => ({
     text: `w${i}`,
-    start: i * step,
-    end: i * step + step * 0.8,
+    start: bound.start + i * step,
+    end: bound.start + i * step + step * 0.8,
+  }));
+}
+
+/** Как whisper врёт на длинном файле: слова схлопываются в одну точку. */
+function heardFlat(bound: Bound, count: number): Word[] {
+  return Array.from({ length: count }, (_, i) => ({
+    text: `w${i}`,
+    start: bound.start,
+    end: bound.start,
   }));
 }
 
@@ -131,7 +147,7 @@ describe("разметка голоса", () => {
 
   it("субтитры истории не показывают разметку", () => {
     const beats = [{ text: "sil<[500]> Ударить **куклу**.", visual: { kind: "card" } }];
-    const layout = layoutBeats(beats, heard(2));
+    const layout = layoutBeats(beats, [], [{ start: 0, end: 2 }]);
     const ass = buildAss(layout, storyTotal(layout));
     expect(ass).not.toContain("sil<[");
     expect(ass).not.toContain("**");
@@ -141,10 +157,9 @@ describe("разметка голоса", () => {
 
 describe("куски для голоса", () => {
   it("режет текст по концам фраз и держит предел куска", () => {
-    const story = parseStory(
-      JSON.parse(readFileSync("content/reels/stories/robot-knife.json", "utf8")),
-    );
-    const text = storyText(story.beats);
+    const text = parseStory(story)
+      .beats.map((beat: { text: string }) => beat.text)
+      .join(" ");
     const chunks = chunkText(text);
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(STORY.chunk);
@@ -159,19 +174,47 @@ describe("куски для голоса", () => {
   });
 });
 
+describe("дорожка звука", () => {
+  it("звук не переписывает свои времена счётчиком сэмплов", () => {
+    // asetpts=N/SR/TB рядом с видео из склейки сминает часть дорожки в точку.
+    expect(storyAudioFilter(66.494, false)).not.toContain("asetpts");
+    expect(storyAudioFilter(66.494, true)).not.toContain("asetpts");
+    expect(audioFilter(27, false)).not.toContain("asetpts");
+    expect(audioFilter(27, true)).not.toContain("asetpts");
+    expect(storyAudioFilter(66.494, false)).toContain("atrim=0:66.494");
+  });
+});
+
+describe("границы битов", () => {
+  it("границы равны накопленным длинам звука плюс паузы между битами", () => {
+    const bounds = beatBounds([2, 1.5, 3]);
+    const pause = STORY.beatPause;
+    expect(bounds[0]).toEqual({ start: 0, end: 2 });
+    expect(bounds[1]).toEqual({ start: 2 + pause, end: 2 + pause + 1.5 });
+    expect(bounds[2]).toEqual({
+      start: 2 + pause + 1.5 + pause,
+      end: 2 + pause + 1.5 + pause + 3,
+    });
+    // Пауза не принадлежит ни одному биту: между ними ровно её длина.
+    expect(bounds[1].start - bounds[0].end).toBeCloseTo(pause, 6);
+    expect(bounds[2].start - bounds[1].end).toBeCloseTo(pause, 6);
+  });
+});
+
 describe("раскладка слов по битам", () => {
   const beats = [
     { text: "раз два три", visual: { kind: "card", big: "1", small: "x" } },
     { text: "четыре пять", visual: { kind: "card", big: "2", small: "y" } },
     { text: "шесть", visual: { kind: "card", big: "3", small: "z" } },
   ];
+  const bounds = beatBounds([3, 2, 1]);
 
-  it("бит с k словами из N получает свою долю услышанных слов", () => {
-    const layout = layoutBeats(beats, heard(6));
-    expect(layout.map((b) => b.words.length)).toEqual([3, 2, 1]);
-    expect(layout[0].start).toBe(0);
-    expect(layout[1].start).toBe(3);
-    expect(layout[2].start).toBe(5);
+  it("бит живёт ровно в границах своего звука, а не там, где услышала машина", () => {
+    const layout = layoutBeats(beats, [], bounds);
+    expect(layout.map((b: { words: unknown[] }) => b.words.length)).toEqual([3, 2, 1]);
+    expect(layout.map((b: Bound) => [b.start, b.end])).toEqual(
+      bounds.map((b: Bound) => [b.start, b.end]),
+    );
     expect(flatWords(layout).map((w: Word) => w.text)).toEqual([
       "раз",
       "два",
@@ -182,27 +225,54 @@ describe("раскладка слов по битам", () => {
     ]);
   });
 
-  it("слов машина услышала больше, чем в тексте — доли те же", () => {
-    const layout = layoutBeats(beats, heard(12, 0.5));
-    expect(layout.map((b) => b.words.length)).toEqual([3, 2, 1]);
-    expect(layout[0].start).toBe(0);
-    expect(layout[2].end).toBeCloseTo(5.9, 6);
-    const times = flatWords(layout).map((w: Word) => w.start);
-    expect([...times].sort((a, b) => a - b)).toEqual(times);
-  });
-
-  it("слов машина услышала меньше — бит делится ровно по времени", () => {
-    const layout = layoutBeats(beats, heard(3, 2));
-    expect(layout.map((b) => b.words.length)).toEqual([3, 2, 1]);
-    for (const beat of layout) {
-      for (const word of beat.words) expect(word.end).toBeGreaterThan(word.start);
+  it("бит с честными словами машины берёт её времена", () => {
+    const honest = heardIn(bounds[0], 3);
+    const layout = layoutBeats(beats, [honest, [], []], bounds);
+    expect(trustHeard(honest, ["раз", "два", "три"])).toBe(true);
+    expect(layout[0].byWhisper).toBe(true);
+    const words = layout[0].words as Word[];
+    expect(words.map((w) => w.start)).toEqual(honest.map((h) => h.start));
+    expect(words.at(-1)!.end).toBeLessThanOrEqual(bounds[0].end);
+    for (const [i, word] of words.entries()) {
+      expect(word.end - word.start).toBeGreaterThanOrEqual(STORY.minWord - 1e-9);
+      if (i > 0) expect(word.start).toBeGreaterThan(words[i - 1].start);
     }
   });
 
-  it("длина ролика — последнее слово плюс хвост, клипы идут встык", () => {
-    const layout = layoutBeats(beats, heard(6));
+  it("бит с нулевыми длинами у машины раскладывается по буквам и монотонно", () => {
+    const broken = heardFlat(bounds[0], 3);
+    expect(trustHeard(broken, ["раз", "два", "три"])).toBe(false);
+    const layout = layoutBeats(beats, [broken, [], []], bounds);
+    expect(layout[0].byWhisper).toBe(false);
+    const words = layout[0].words as Word[];
+    for (const [i, word] of words.entries()) {
+      expect(word.end).toBeGreaterThan(word.start);
+      expect(word.end - word.start).toBeGreaterThanOrEqual(STORY.minWord - 1e-9);
+      if (i > 0) expect(word.start).toBe(words[i - 1].end);
+    }
+    expect(words[0].start).toBe(bounds[0].start);
+    expect(words.at(-1)!.end).toBe(bounds[0].end);
+    // Слова одной длины делят бит поровну, а не схлопываются к его началу.
+    expect(words[0].end - words[0].start).toBeCloseTo(1, 1);
+  });
+
+  it("слово с точкой на конце держится дольше соседа той же длины", () => {
+    const [plain, dotted] = letterDurations(["дом", "дом."], 4);
+    expect(dotted).toBeGreaterThan(plain);
+    expect(plain + dotted).toBeCloseTo(4, 6);
+  });
+
+  it("сумма длительностей равна биту, и ни одно слово не короче минимума", () => {
+    const fitted = fitDurations([10, 0, 0, 1], 4);
+    expect(fitted.reduce((a: number, b: number) => a + b, 0)).toBeCloseTo(4, 6);
+    for (const d of fitted) expect(d).toBeGreaterThanOrEqual(STORY.minWord - 1e-9);
+  });
+
+  it("длина ролика — конец последнего бита плюс хвост, клипы идут встык", () => {
+    const layout = layoutBeats(beats, [], bounds);
     const total = storyTotal(layout);
-    expect(total).toBeCloseTo((flatWords(layout).at(-1) as Word).end + STORY.tail, 6);
+    expect(total).toBeCloseTo(bounds.at(-1)!.end + STORY.tail, 6);
+    expect(STORY.tail).toBe(0.6);
     const durations = clipDurations(layout, total);
     expect(durations.reduce((a: number, b: number) => a + b, 0)).toBeCloseTo(total, 6);
   });
@@ -218,9 +288,10 @@ describe("субтитры", () => {
     { text: "раз два", visual: { kind: "card", big: "1", small: "x" } },
     { text: "три", visual: { kind: "card", big: "2", small: "y" } },
   ];
+  const bounds = beatBounds([2, 1]);
 
   it("событий столько же, сколько слов, плюс водяной знак", () => {
-    const layout = layoutBeats(beats, heard(3));
+    const layout = layoutBeats(beats, [], bounds);
     const ass = buildAss(layout, storyTotal(layout));
     const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
     expect(events.filter((e) => e.includes(",Word,"))).toHaveLength(3);
@@ -230,7 +301,7 @@ describe("субтитры", () => {
   });
 
   it("у каждого слова своё время на экране, без вспышек", () => {
-    const layout = layoutBeats(beats, heard(3));
+    const layout = layoutBeats(beats, [], bounds);
     const total = storyTotal(layout);
     const ass = buildAss(layout, total);
     const events = ass
@@ -248,7 +319,7 @@ describe("субтитры", () => {
   });
 
   it("времена не убывают и слова взяты из текста", () => {
-    const layout = layoutBeats(beats, heard(6, 0.5));
+    const layout = layoutBeats(beats, [heardIn(bounds[0], 2), heardIn(bounds[1], 1)], bounds);
     const ass = buildAss(layout, storyTotal(layout));
     const starts = ass
       .split("\n")

@@ -15,8 +15,14 @@ export const STORY = {
   speed: 1.1,
   // Синхронный SpeechKit v3 берёт короткими кусками — 250 знаков за запрос.
   chunk: 240,
-  // Шов между кусками: столько тишины, чтобы фразы не слипались.
+  // Шов между кусками внутри бита: столько тишины, чтобы фразы не слипались.
   chunkPauseMs: 120,
+  // Тишина между соседними битами: по ней и проходит граница бита.
+  beatPause: 0.25,
+  // Ни одно слово не висит на экране меньше этого.
+  minWord: 0.12,
+  // Слово с точкой или запятой на конце держится чуть дольше: речь тормозит.
+  punctTail: 0.15,
   musicDb: -14,
   fadeSeconds: 1.5,
   zoomTo: 1.06,
@@ -175,9 +181,19 @@ export function chunkText(text, limit = STORY.chunk) {
   return out;
 }
 
-/** Весь текст истории одним куском — его и читает голос. */
-export function storyText(beats) {
-  return beats.map((b) => b.text).join(" ");
+/**
+ * Границы битов из точных длин их звука: между соседними битами лежит пауза
+ * тишины, и она не принадлежит ни одному из них. Распознавание здесь не
+ * участвует вовсе — в этом весь смысл.
+ */
+export function beatBounds(seconds, pause = STORY.beatPause) {
+  let at = 0;
+  return seconds.map((value, i) => {
+    if (i > 0) at = round3(at + pause);
+    const start = at;
+    at = round3(at + value);
+    return { start, end: at };
+  });
 }
 
 /** Есть ли у машины слова хотя бы примерно столько же, сколько в тексте. */
@@ -186,57 +202,139 @@ export function wordDrift(textCount, heardCount) {
   return Math.abs(heardCount - textCount) / textCount;
 }
 
-function evenSpan(start, end, count) {
-  const step = (end - start) / count;
-  return Array.from({ length: count }, (_, j) => ({
-    start: round3(start + j * step),
-    end: round3(start + (j + 1) * step),
+const ENDS_PHRASE = /[.,!?;:…]["»)]?$/;
+
+function letterCount(word) {
+  const letters = String(word).match(/[\p{L}\p{N}]/gu);
+  return letters ? letters.length : 1;
+}
+
+/**
+ * Запасная раскладка: слово занимает время по числу своих букв, а слово с
+ * точкой или запятой на конце получает лишние STORY.punctTail секунд — там
+ * речь и правда притормаживает. Лишнее время не съедает больше половины бита.
+ */
+export function letterDurations(words, seconds) {
+  const extra = words.map((w) => (ENDS_PHRASE.test(w) ? STORY.punctTail : 0));
+  let held = extra.reduce((a, b) => a + b, 0);
+  if (held > seconds / 2) {
+    const k = seconds / 2 / held;
+    for (let i = 0; i < extra.length; i += 1) extra[i] *= k;
+    held = seconds / 2;
+  }
+  const letters = words.map(letterCount);
+  const sum = letters.reduce((a, b) => a + b, 0) || 1;
+  const rest = Math.max(0, seconds - held);
+  return words.map((_, i) => (rest * letters[i]) / sum + extra[i]);
+}
+
+/**
+ * Можно ли верить словам whisper внутри этого бита. Три проверки: он услышал
+ * столько же слов, сколько в тексте (±1); ни одно не нулевой длины; времена
+ * не убывают. Не прошло — слова раскладываются по буквам.
+ */
+export function trustHeard(heard, words) {
+  if (!Array.isArray(heard) || heard.length === 0 || words.length === 0) return false;
+  if (Math.abs(heard.length - words.length) > 1) return false;
+  let prev = -Infinity;
+  for (const w of heard) {
+    if (!(w.end > w.start)) return false;
+    if (w.start < prev) return false;
+    prev = w.start;
+  }
+  return true;
+}
+
+/**
+ * Времена слов прямо от whisper: слово встаёт туда, где машина его услышала,
+ * и висит до следующего. Слова не влезли в границы бита с минимальной длиной —
+ * возвращается null, и раскладка уходит на буквы.
+ */
+function spansFromHeard(heard, words, bound, min) {
+  const m = heard.length;
+  const n = words.length;
+  const at = (j) => heard[Math.min(m - 1, Math.floor((j * m) / n))];
+  const starts = [];
+  let cursor = bound.start;
+  for (let j = 0; j < n; j += 1) {
+    const want = Math.min(Math.max(at(j).start, bound.start), bound.end);
+    const start = Math.max(cursor, want);
+    starts.push(start);
+    cursor = start + min;
+  }
+  if (cursor > bound.end) return null;
+  const tail = Math.min(bound.end, Math.max(heard[m - 1].end, starts[n - 1] + min));
+  return starts.map((start, j) => ({
+    start: round3(start),
+    end: round3(j + 1 < n ? starts[j + 1] : tail),
   }));
 }
 
 /**
- * Раскладывает услышанные машиной слова по битам ДОЛЕЙ слов текста: бит с k
- * словами из N получает k/N услышанных слов по порядку. Показываются всегда
- * слова текста, время берётся у услышанных.
+ * Длительности слов под точную длину бита: сумма равна ей ровно, ни одно слово
+ * не короче STORY.minWord. Слов столько, что минимум не влезает, — делим поровну.
  */
-export function layoutBeats(beats, heard) {
-  const perBeat = beats.map((b) => splitWords(b.text));
-  const total = perBeat.reduce((sum, w) => sum + w.length, 0);
-  const heardCount = heard.length;
-  if (heardCount === 0) throw new Error("История: машина не услышала ни одного слова");
-  const bounds = [0];
-  let seen = 0;
-  for (const words of perBeat) {
-    seen += words.length;
-    bounds.push(Math.min(heardCount, Math.round((seen / total) * heardCount)));
-  }
-  bounds[bounds.length - 1] = heardCount;
-
-  const out = [];
-  for (const [i, words] of perBeat.entries()) {
-    const from = Math.min(bounds[i], heardCount - 1);
-    const to = Math.max(bounds[i + 1], from + 1);
-    const mine = heard.slice(from, to);
-    const start = mine[0].start;
-    const end = mine[mine.length - 1].end;
-    let spans;
-    if (mine.length >= words.length) {
-      spans = words.map((_, j) => {
-        const a = Math.floor((j * mine.length) / words.length);
-        const b = Math.max(a + 1, Math.floor(((j + 1) * mine.length) / words.length));
-        return { start: mine[a].start, end: mine[Math.min(b, mine.length) - 1].end };
-      });
-    } else {
-      spans = evenSpan(start, end, words.length);
-    }
-    out.push({
-      index: i,
-      start: round3(start),
-      end: round3(end),
-      words: words.map((text, j) => ({ text, start: spans[j].start, end: spans[j].end })),
+export function fitDurations(durs, seconds, min = STORY.minWord) {
+  const n = durs.length;
+  if (n === 0) return [];
+  if (seconds <= n * min) return durs.map(() => seconds / n);
+  let d = durs.map((x) => (Number.isFinite(x) && x > 0 ? x : 0));
+  if (d.every((x) => x === 0)) d = durs.map(() => 1);
+  const start = d.reduce((a, b) => a + b, 0);
+  d = d.map((x) => (x * seconds) / start);
+  for (let pass = 0; pass <= n; pass += 1) {
+    const small = d.map((x) => x < min - 1e-9);
+    const count = small.filter(Boolean).length;
+    if (count === 0) break;
+    const free = seconds - count * min;
+    const rest = d.reduce((s, x, i) => s + (small[i] ? 0 : x), 0);
+    d = d.map((x, i) => {
+      if (small[i]) return min;
+      return rest > 0 ? (x * free) / rest : free / (n - count);
     });
   }
-  return out;
+  return d;
+}
+
+/**
+ * Раскладывает слова текста внутри ТОЧНЫХ границ бита. Границы приходят из
+ * длины звука каждого бита (`bounds`), а whisper только уточняет время слов
+ * внутри бита и только когда он услышал этот кусок честно (`trustHeard`).
+ * Инвариант: времена строго возрастают, слово не короче STORY.minWord,
+ * конец последнего слова бита равен концу бита.
+ */
+export function layoutBeats(beats, heardByBeat = [], bounds = []) {
+  if (!Array.isArray(bounds) || bounds.length !== beats.length) {
+    throw new Error("История: у каждого бита должна быть граница по длине его звука");
+  }
+  return beats.map((beat, i) => {
+    const words = splitWords(beat.text);
+    const bound = bounds[i];
+    const seconds = Math.max(0.05, bound.end - bound.start);
+    const heard = heardByBeat[i] || [];
+    const spans = trustHeard(heard, words)
+      ? spansFromHeard(heard, words, bound, STORY.minWord)
+      : null;
+    let out;
+    if (spans) {
+      out = words.map((text, j) => ({ text, start: spans[j].start, end: spans[j].end }));
+    } else {
+      const fitted = fitDurations(letterDurations(words, seconds), seconds);
+      let at = bound.start;
+      out = words.map((text, j) => {
+        const start = round3(at);
+        at = j === words.length - 1 ? bound.end : at + fitted[j];
+        return { text, start, end: round3(at) };
+      });
+    }
+    return {
+      index: i,
+      start: round3(bound.start),
+      end: round3(bound.end),
+      byWhisper: Boolean(spans),
+      words: out,
+    };
+  });
 }
 
 /** Все слова ролика подряд — из них собираются субтитры. */
@@ -244,10 +342,9 @@ export function flatWords(layout) {
   return layout.flatMap((beat) => beat.words);
 }
 
-/** Длина ролика: последнее слово плюс хвост. */
+/** Длина ролика: конец последнего бита плюс хвост. */
 export function storyTotal(layout, tail = STORY.tail) {
-  const words = flatWords(layout);
-  return round3(words[words.length - 1].end + tail);
+  return round3(layout[layout.length - 1].end + tail);
 }
 
 /**
@@ -388,11 +485,13 @@ export function storyAudioFilter(total, hasMusic, opts = {}) {
   const db = opts.musicDb ?? STORY.musicDb;
   const fade = opts.fadeSeconds ?? STORY.fadeSeconds;
   const fadeAt = round3(Math.max(0, total - fade));
-  const voice = `[1:a]aresample=48000,apad,atrim=0:${total},asetpts=N/SR/TB`;
+  // Времена звука не переписываются счётчиком сэмплов: с входом concat
+  // `asetpts=N/SR/TB` сминает часть дорожки в одну точку (см. docs/reels.md).
+  const voice = `[1:a]aresample=48000,apad,atrim=0:${total}`;
   if (!hasMusic) return `${voice}[aout]`;
   return (
     `${voice}[va];` +
-    `[2:a]aresample=48000,volume=${db}dB,apad,atrim=0:${total},asetpts=N/SR/TB,` +
+    `[2:a]aresample=48000,volume=${db}dB,apad,atrim=0:${total},` +
     `afade=t=out:st=${fadeAt}:d=${fade}[ma];` +
     `[va][ma]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`
   );
