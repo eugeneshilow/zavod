@@ -15,6 +15,18 @@ export const STORY = {
   speed: 1.1,
   // Синхронный SpeechKit v3 берёт короткими кусками — 250 знаков за запрос.
   chunk: 240,
+  // ElevenLabs: настройки голоса канала — спокойный невозмутимый рассказчик.
+  eleven: {
+    model: "eleven_v3",
+    modelV2: "eleven_multilingual_v2",
+    stability: 0.55,
+    language: "ru",
+    // Один запрос v3 берёт до 5000 знаков — наши биты короче с запасом.
+    chunk: 4800,
+    // У v3 регулятора скорости нет: темп правит atempo, и только в этих краях.
+    tempoMin: 0.85,
+    tempoMax: 1.15,
+  },
   // Шов между кусками внутри бита: столько тишины, чтобы фразы не слипались.
   chunkPauseMs: 120,
   // Тишина между соседними битами: по ней и проходит граница бита.
@@ -39,6 +51,13 @@ export const STORY = {
 const VISUAL_KINDS = ["image", "video", "card", "tweet"];
 const round3 = (n) => Math.round(n * 1000) / 1000;
 
+// Аудио-тег ElevenLabs — `[quietly]`. Скобка после `<` тегом не считается:
+// это пауза SpeechKit `sil<[300]>`, у неё своя судьба.
+const AUDIO_TAG = /(?<!<)\[[^\]\n]*\]/g;
+// Пробел перед знаком препинания съедается, а перед многоточием — остаётся:
+// «...» у ElevenLabs это пауза, и приклеивать её к прошлому слову нельзя.
+const GLUE_PUNCT = /\s+(?=[,.!?:;…])(?!\.\.)/g;
+
 function need(value, what) {
   if (value === undefined || value === null || value === "") {
     throw new Error(`История: не хватает поля ${what}`);
@@ -47,24 +66,38 @@ function need(value, what) {
 }
 
 /**
- * Голос: `say:<имя>` (встроенный в macOS) или `yandex:<голос>[:<амплуа>]`
- * (SpeechKit). Амплуа — настроение голоса: good, neutral, strict.
+ * Голос трёх движков: `eleven:<voice_id>` — ElevenLabs v3 с аудио-тегами,
+ * `eleven:<voice_id>:v2` — ElevenLabs Multilingual v2 (у неё есть скорость),
+ * `yandex:<голос>[:<амплуа>]` — SpeechKit (амплуа: good, neutral, strict),
+ * `say:<имя>` — встроенный в macOS черновик. Канон — docs/reels.md.
  */
 export function parseVoice(value) {
   const [engine, name, role] = String(value ?? "")
     .trim()
     .split(":")
     .map((part) => part.trim());
-  if (engine !== "say" && engine !== "yandex") {
+  if (engine !== "say" && engine !== "yandex" && engine !== "eleven") {
     throw new Error(
-      `История: голос бывает say:<имя> или yandex:<голос>[:<амплуа>], а не «${value}»`,
+      "История: голос бывает eleven:<voice_id>[:v2], yandex:<голос>[:<амплуа>] " +
+        `или say:<имя>, а не «${value}»`,
     );
   }
   if (!name) throw new Error(`История: у голоса «${engine}» не назван голос: ${engine}:<имя>`);
+  if (engine === "eleven") {
+    if (role && role !== "v2" && role !== "v3") {
+      throw new Error(`История: у голоса eleven бывает только модель v2 или v3, а не «${role}»`);
+    }
+    return {
+      engine,
+      name,
+      role: null,
+      model: role === "v2" ? STORY.eleven.modelV2 : STORY.eleven.model,
+    };
+  }
   if (role && engine !== "yandex") {
     throw new Error(`История: амплуа бывает только у голоса yandex, а не у «${engine}»`);
   }
-  return { engine, name, role: role || null };
+  return { engine, name, role: role || null, model: null };
 }
 
 function parseVisual(raw, i) {
@@ -116,22 +149,58 @@ export function parseStory(raw) {
     sources: Array.isArray(raw?.sources) ? raw.sources : [],
     beats: beats.map((beat, i) => ({
       text: String(need(beat?.text, `beats[${i}].text`)).trim(),
+      // Текст для голоса, когда он отличается от экранного: числа и латиница
+      // словами. Поля нет — голос читает text.
+      say: beat?.say ? String(beat.say).trim() : null,
       visual: parseVisual(beat?.visual, i),
     })),
   };
 }
 
 /**
- * Текст бита может нести разметку SpeechKit: пауза `sil<[300]>` и ударение
- * `**слово**`. Голосу она уходит как есть, зрителю — никогда: субтитры и счёт
- * слов идут по очищенному тексту.
+ * Текст бита может нести разметку трёх видов: пауза `sil<[300]>` и ударение
+ * `**слово**` (SpeechKit), аудио-теги `[thoughtful]` и многоточия-паузы
+ * (ElevenLabs). Голосу она уходит по правилам своего движка, зрителю — никогда:
+ * субтитры и счёт слов идут по очищенному тексту. Канон — docs/reels.md.
  */
 export function cleanText(text) {
   return String(text)
     .replace(/sil<\[\d+\]>/g, " ")
+    .replace(AUDIO_TAG, " ")
     .replace(/\*\*/g, "")
-    .replace(/\s+([,.!?:;…])/g, "$1")
+    .replace(/\s*(?:\.{2,}|…)\s*/g, ". ")
+    .replace(GLUE_PUNCT, "")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Разметка SpeechKit на языке ElevenLabs: паузы `sil<[N]>` становятся
+ * многоточием (SSML-пауз у v3 нет, паузу держит «...»), ударения `**слово**`
+ * теряют звёздочки — ударений v3 не знает. Аудио-теги `[…]` остаются: они и
+ * есть разметка этого движка.
+ */
+export function toElevenMarkup(text) {
+  return String(text)
+    .replace(/sil<\[\d+\]>/g, "...")
+    .replace(/\*\*/g, "")
+    .replace(GLUE_PUNCT, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+/**
+ * Текст, который слышит голос. У ElevenLabs это `say` бита, если он есть, —
+ * там числа и латиница написаны словами; разметка переводится на его язык.
+ * У SpeechKit и macOS всё как было: их собственная разметка уходит как есть,
+ * а чужие аудио-теги вырезаются — иначе голос прочитает их вслух.
+ */
+export function voiceTextFor(engine, beat) {
+  if (engine === "eleven") return toElevenMarkup(beat.say ?? beat.text);
+  return String(beat.text)
+    .replace(AUDIO_TAG, " ")
+    .replace(GLUE_PUNCT, "")
+    .replace(/[ \t]+/g, " ")
     .trim();
 }
 
@@ -179,6 +248,37 @@ export function chunkText(text, limit = STORY.chunk) {
     else out.push(piece);
   }
   return out;
+}
+
+/**
+ * Ключ звука бита: по нему решается, переозвучивать его или взять с диска.
+ * В ключ входит всё, что меняет звучание, — текст ДЛЯ ГОЛОСА, сам голос,
+ * модель, stability и скорость. Канон — docs/reels.md.
+ */
+export function voiceCacheParts(story, beat) {
+  const { engine, name, role, model } = story.voice;
+  return [
+    voiceTextFor(engine, beat),
+    engine,
+    name,
+    role ?? null,
+    model ?? null,
+    engine === "eleven" ? STORY.eleven.stability : null,
+    story.speed,
+  ];
+}
+
+/**
+ * Темп для ElevenLabs v3: регулятора скорости у неё нет, поэтому `speed`
+ * истории правит уже готовый звук бита фильтром `atempo` — высота при этом не
+ * меняется. За краями 0.85–1.15 слышно, что запись тянут, поэтому значение вне
+ * предела подрезается до края, и рендер говорит об этом в отчёте.
+ */
+export function elevenTempo(speed) {
+  const { tempoMin, tempoMax } = STORY.eleven;
+  const wanted = Number(speed);
+  if (!Number.isFinite(wanted) || wanted <= 0) return 1;
+  return Math.min(tempoMax, Math.max(tempoMin, wanted));
 }
 
 /**
