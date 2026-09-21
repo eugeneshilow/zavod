@@ -311,16 +311,14 @@ export type IgMediaItem = {
   timestamp: number | null;
 };
 
-/** Последние медиа аккаунта, включая опубликованные руками. */
-export async function getRecentMedia(
-  token: string,
-  opts: { limit?: number } = {},
-): Promise<IgMediaItem[]> {
-  const json = await getJson(
-    `${GRAPH}/me/media?fields=id,media_type,media_product_type,permalink,caption,timestamp&limit=${opts.limit ?? 25}&access_token=${encodeURIComponent(token)}`,
-  );
+const MEDIA_FIELDS = "id,media_type,media_product_type,permalink,caption,timestamp";
+
+type IgMediaPage = { items: IgMediaItem[]; next: string | null; after: string | null };
+
+/** Одна страница ответа /me/media: сами медиа и адрес следующей страницы. */
+function parseMediaPage(json: Record<string, unknown>): IgMediaPage {
   const data = Array.isArray(json.data) ? (json.data as Array<Record<string, unknown>>) : [];
-  return data.flatMap((item) => {
+  const items = data.flatMap((item) => {
     if (typeof item.id !== "string") return [];
     const parsedTimestamp =
       typeof item.timestamp === "string" ? Date.parse(item.timestamp) : Number.NaN;
@@ -336,6 +334,59 @@ export async function getRecentMedia(
       },
     ];
   });
+  const paging = json.paging as { next?: unknown; cursors?: { after?: unknown } } | undefined;
+  return {
+    items,
+    next: typeof paging?.next === "string" ? paging.next : null,
+    after: typeof paging?.cursors?.after === "string" ? paging.cursors.after : null,
+  };
+}
+
+/** Последние медиа аккаунта, включая опубликованные руками. */
+export async function getRecentMedia(
+  token: string,
+  opts: { limit?: number } = {},
+): Promise<IgMediaItem[]> {
+  const json = await getJson(
+    `${GRAPH}/me/media?fields=${MEDIA_FIELDS}&limit=${opts.limit ?? 25}&access_token=${encodeURIComponent(token)}`,
+  );
+  return parseMediaPage(json).items;
+}
+
+/**
+ * Весь эфир аккаунта, страницами по 50, но не больше max штук. Нужен сбору
+ * цифр: по полному списку видно не только новое, но и то, что с площадки
+ * пропало (удалённый ролик). Страницы идут по paging.next, а если его нет —
+ * по курсору paging.cursors.after.
+ */
+export async function getAllMedia(
+  token: string,
+  opts: { max?: number } = {},
+): Promise<IgMediaItem[]> {
+  const max = opts.max ?? 200;
+  const page = 50;
+  const out: IgMediaItem[] = [];
+  const seen = new Set<string>();
+  let url = `${GRAPH}/me/media?fields=${MEDIA_FIELDS}&limit=${page}&access_token=${encodeURIComponent(token)}`;
+  // Предохранитель от бесконечной ленты: страниц не больше, чем нужно на max.
+  for (let guard = 0; guard < Math.ceil(max / page) + 2 && out.length < max; guard++) {
+    const parsed = parseMediaPage(await getJson(url));
+    for (const item of parsed.items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push(item);
+      if (out.length >= max) break;
+    }
+    if (out.length >= max) break;
+    if (parsed.next) {
+      url = parsed.next;
+    } else if (parsed.after) {
+      url = `${GRAPH}/me/media?fields=${MEDIA_FIELDS}&limit=${page}&after=${encodeURIComponent(parsed.after)}&access_token=${encodeURIComponent(token)}`;
+    } else {
+      break;
+    }
+  }
+  return out;
 }
 
 export type IgMediaMetrics = {

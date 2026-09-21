@@ -9,6 +9,7 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as lib_instagram_media from "../lib/instagram_media.js";
 import type * as services_admin_actions from "../services/admin_actions.js";
 import type * as services_admin_gate from "../services/admin_gate.js";
 import type * as services_instagram from "../services/instagram.js";
@@ -20,6 +21,7 @@ import type * as tables_data_raw_instagram_metrics from "../tables/data_raw_inst
 import type * as tables_ops_alerts from "../tables/ops_alerts.js";
 import type * as tables_ops_channel_toggles from "../tables/ops_channel_toggles.js";
 import type * as tables_ops_instagram_state from "../tables/ops_instagram_state.js";
+import type * as tables_ops_reel_ideas from "../tables/ops_reel_ideas.js";
 import type * as tables_ops_social_snapshots from "../tables/ops_social_snapshots.js";
 import type * as workflows_instagram_publishing from "../workflows/instagram_publishing.js";
 
@@ -31,6 +33,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  "lib/instagram_media": typeof lib_instagram_media;
   "services/admin_actions": typeof services_admin_actions;
   "services/admin_gate": typeof services_admin_gate;
   "services/instagram": typeof services_instagram;
@@ -42,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   "tables/ops_alerts": typeof tables_ops_alerts;
   "tables/ops_channel_toggles": typeof tables_ops_channel_toggles;
   "tables/ops_instagram_state": typeof tables_ops_instagram_state;
+  "tables/ops_reel_ideas": typeof tables_ops_reel_ideas;
   "tables/ops_social_snapshots": typeof tables_ops_social_snapshots;
   "workflows/instagram_publishing": typeof workflows_instagram_publishing;
 }>;

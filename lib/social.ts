@@ -19,12 +19,34 @@ export type DayCell = { key: string; label: string; posted: number; planned: num
 
 export type Reel = {
   mediaId: string;
+  account: string;
   permalink: string | null;
   postedAt: number | null;
   views: number | null;
   reach: number | null;
+  likes: number | null;
+  comments: number | null;
+  saved: number | null;
+  shares: number | null;
+  interactions: number | null;
+  avgWatchMs: number | null;
+  delta24: number | null;
   delta48: number | null;
+  /** Первый сбор, на котором площадка ролик не вернула; null — ролик в эфире. */
+  missingSince: number | null;
   caption: string;
+};
+
+export type IdeaStatus = "new" | "taken" | "done" | "failed";
+
+export type Idea = {
+  id: string;
+  text: string;
+  createdAt: number;
+  status: IdeaStatus;
+  takenAt: number | null;
+  note: string | null;
+  permalink: string | null;
 };
 
 export type NetworkGlance = {
@@ -44,7 +66,13 @@ export type NetworkGlance = {
   posts7d: number;
   views7d: number | null;
   days: DayCell[];
-  best: Reel[];
+  /** Ролики в эфире, по просмотрам вниз. */
+  reels: Reel[];
+  /** Удалённые с площадки, по времени пометки вниз; цифры — последние снятые. */
+  deleted: Reel[];
+  /** Лучший ролик в эфире — первая строка reels. */
+  top: Reel | null;
+  ideas: Idea[];
   waiting: number;
   failed: number;
 };
@@ -102,17 +130,103 @@ export function postsByDay(rows: QueueRow[], channel: Channel, now: number): Day
   return grid;
 }
 
+type AirtimeRow = {
+  mediaId: string;
+  account?: string;
+  permalink?: string | null;
+  caption?: string | null;
+  postedAt?: number | null;
+  missingSince?: number | null;
+  views24h?: number | null;
+  views48h?: number | null;
+  metrics?: {
+    views?: number;
+    reach?: number;
+    likes?: number;
+    comments?: number;
+    saved?: number;
+    shares?: number;
+    totalInteractions?: number;
+    avgWatchTimeMs?: number;
+  } | null;
+};
+
+/** Строка эфира из базы — в строку экрана. */
+export function toReel(row: AirtimeRow): Reel {
+  const m = row.metrics ?? null;
+  return {
+    mediaId: row.mediaId,
+    account: row.account ?? "",
+    permalink: row.permalink ?? null,
+    postedAt: row.postedAt ?? null,
+    views: m?.views ?? null,
+    reach: m?.reach ?? null,
+    likes: m?.likes ?? null,
+    comments: m?.comments ?? null,
+    saved: m?.saved ?? null,
+    shares: m?.shares ?? null,
+    interactions: m?.totalInteractions ?? null,
+    avgWatchMs: m?.avgWatchTimeMs ?? null,
+    delta24: row.views24h ?? null,
+    delta48: row.views48h ?? null,
+    missingSince: row.missingSince ?? null,
+    caption: row.caption ?? "",
+  };
+}
+
+/**
+ * Эфир сети: живые ролики по просмотрам вниз, удалённые отдельным хвостом.
+ * Просмотры за семь дней и лучший ролик считаются только по живым: цифры
+ * удалённого — последние известные, в сумму недели они уже не идут.
+ */
+export function splitAirtime(
+  rows: Reel[],
+  now: number,
+): { reels: Reel[]; deleted: Reel[]; views7d: number | null; top: Reel | null } {
+  const live = rows
+    .filter((r) => r.missingSince === null)
+    .sort((a, b) => (b.views ?? -1) - (a.views ?? -1));
+  const deleted = rows
+    .filter((r) => r.missingSince !== null)
+    .sort((a, b) => (b.missingSince ?? 0) - (a.missingSince ?? 0));
+  const week = live.filter((r) => (r.postedAt ?? 0) >= now - 7 * DAY && r.views !== null);
+  return {
+    reels: live,
+    deleted,
+    views7d: week.length ? week.reduce((sum, r) => sum + (r.views ?? 0), 0) : null,
+    top: live[0] ?? null,
+  };
+}
+
+/** Статус идеи словом — как он стоит в списке лотка. */
+export function ideaStatusWord(idea: Pick<Idea, "status" | "takenAt" | "note">): string {
+  if (idea.status === "new") return "ждёт раннер";
+  if (idea.status === "taken") {
+    const at = idea.takenAt
+      ? new Intl.DateTimeFormat("ru-RU", {
+          timeZone: MSK,
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(idea.takenAt))
+      : null;
+    return at ? `в работе с ${at}` : "в работе";
+  }
+  if (idea.status === "done") return "готово";
+  return `не вышло: ${idea.note ?? "без причины"}`;
+}
+
 export async function loadSocial(now = Date.now()): Promise<SocialData | { reason: string }> {
   const access = reelsAccess();
   if ("reason" in access) return access;
   const { client, token } = access;
   try {
-    const [queue, airtime, toggles, state, snapshot] = await Promise.all([
+    const [queue, airtime, toggles, state, snapshot, ideas] = await Promise.all([
       client.query(api.tables.data_cooked_instagram_reels.listForAdmin, { token, limit: 200 }),
-      client.query(api.tables.data_raw_instagram_media.listAirtimeForAdmin, { token, limit: 30 }),
+      client.query(api.tables.data_raw_instagram_media.listAirtimeForAdmin, { token, limit: 50 }),
       client.query(api.tables.ops_channel_toggles.state, { token }),
       client.query(api.tables.ops_instagram_state.statusForAdmin, { token }),
       client.query(api.tables.ops_social_snapshots.latest, { token, network: "instagram" }),
+      client.query(api.tables.ops_reel_ideas.listForAdmin, { token, limit: 10 }),
     ]);
     const weekAgo = now - 7 * DAY;
     const networks: NetworkGlance[] = NETWORKS.map(({ id, channel, label }) => {
@@ -127,19 +241,7 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
       const waiting = rows.filter((r) => r.status === "approved" || r.status === "draft").length;
       const failed = rows.filter((r) => r.status === "failed").length;
       const isIg = id === "instagram";
-      const reels: Reel[] = isIg
-        ? airtime.map((m) => ({
-            mediaId: m.mediaId,
-            permalink: m.permalink ?? null,
-            postedAt: m.postedAt ?? null,
-            views: m.metrics?.views ?? null,
-            reach: m.metrics?.reach ?? null,
-            delta48: m.views48h ?? null,
-            caption: m.caption ?? "",
-          }))
-        : [];
-      const recent = reels.filter((r) => (r.postedAt ?? 0) >= weekAgo && r.views !== null);
-      const views7d = isIg && recent.length ? recent.reduce((s, r) => s + (r.views ?? 0), 0) : null;
+      const air = splitAirtime(isIg ? airtime.map(toReel) : [], now);
       return {
         id,
         label,
@@ -157,9 +259,12 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
         quotaTotal: isIg ? (snapshot?.quotaTotal ?? null) : null,
         capturedAt: isIg ? (snapshot?.capturedAt ?? null) : null,
         posts7d,
-        views7d,
+        views7d: air.views7d,
         days: postsByDay(queue, channel, now),
-        best: [...reels].sort((a, b) => (b.views ?? -1) - (a.views ?? -1)).slice(0, 5),
+        reels: air.reels,
+        deleted: air.deleted,
+        top: air.top,
+        ideas: isIg ? ideas : [],
         waiting,
         failed,
       };

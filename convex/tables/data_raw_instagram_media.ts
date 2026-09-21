@@ -51,6 +51,7 @@ export const listRecent = internalQuery({
       caption: v.optional(v.string()),
       postedAt: v.optional(v.number()),
       firstSeenAt: v.number(),
+      missingSince: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -58,7 +59,53 @@ export const listRecent = internalQuery({
       .query("data_raw_instagram_media")
       .withIndex("by_account_media", (q) => q.eq("account", args.account))
       .collect();
-    return rows.filter((row) => row.postedAt === undefined || row.postedAt >= args.sinceMs);
+    // Помеченные удалёнными пропускаем: цифры по ним площадка уже не отдаёт,
+    // а последний снятый снимок остаётся в серии как есть.
+    return rows
+      .filter((row) => row.missingSince === undefined)
+      .filter((row) => row.postedAt === undefined || row.postedAt >= args.sinceMs);
+  },
+});
+
+/** Весь реестр аккаунта коротким списком — сбору цифр, чтобы найти пропавших. */
+export const listAccountRegistry = internalQuery({
+  args: { account: v.string() },
+  returns: v.array(
+    v.object({
+      id: v.id("data_raw_instagram_media"),
+      mediaId: v.string(),
+      missingSince: v.optional(v.number()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("data_raw_instagram_media")
+      .withIndex("by_account_media", (q) => q.eq("account", args.account))
+      .collect();
+    return rows.map((row) => ({
+      id: row._id,
+      mediaId: row.mediaId,
+      missingSince: row.missingSince,
+    }));
+  },
+});
+
+/**
+ * Пометить пропавшие с площадки. Наблюдение пишется один раз: у строки с
+ * пометкой она не обновляется, строка и её цифры не трогаются вовсе.
+ */
+export const markMissing = internalMutation({
+  args: { ids: v.array(v.id("data_raw_instagram_media")), at: v.number() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    let marked = 0;
+    for (const id of args.ids) {
+      const row = await ctx.db.get(id);
+      if (!row || row.missingSince !== undefined) continue;
+      await ctx.db.patch(id, { missingSince: args.at });
+      marked++;
+    }
+    return marked;
   },
 });
 
@@ -70,15 +117,26 @@ const DAY_MS = 86_400_000;
  * нет — прироста нет, и это честнее, чем нарисовать ноль.
  */
 export const listAirtimeForAdmin = query({
-  args: { token: v.string(), limit: v.optional(v.number()) },
+  args: { token: v.string(), limit: v.optional(v.number()), account: v.optional(v.string()) },
   handler: async (ctx, args) => {
     requireAdminToken(args.token);
     const limit = Math.min(Math.max(args.limit ?? 10, 1), 50);
-    const media = await ctx.db
-      .query("data_raw_instagram_media")
-      .withIndex("by_posted")
-      .order("desc")
-      .take(limit);
+    const account = args.account;
+    const media =
+      account === undefined
+        ? await ctx.db
+            .query("data_raw_instagram_media")
+            .withIndex("by_posted")
+            .order("desc")
+            .take(limit)
+        : (
+            await ctx.db
+              .query("data_raw_instagram_media")
+              .withIndex("by_account_media", (q) => q.eq("account", account))
+              .collect()
+          )
+            .sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0))
+            .slice(0, limit);
 
     const now = Date.now();
     const out = [];
@@ -101,9 +159,11 @@ export const listAirtimeForAdmin = query({
       };
       out.push({
         mediaId: item.mediaId,
+        account: item.account,
         permalink: item.permalink ?? null,
         caption: item.caption ?? null,
         postedAt: item.postedAt ?? null,
+        missingSince: item.missingSince ?? null,
         capturedAt: latest?.capturedAt ?? null,
         metrics: latest?.metrics ?? null,
         views24h: delta(DAY_MS),

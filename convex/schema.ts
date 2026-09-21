@@ -52,6 +52,10 @@ export default defineSchema({
     caption: v.optional(v.string()),
     postedAt: v.optional(v.number()),
     firstSeenAt: v.number(),
+    // Первый сбор, в ответе которого площадка это медиа не вернула, — значит
+    // его удалили. Наблюдение пишется один раз и не снимается: строка и все
+    // снятые цифры остаются, ролик просто уходит в нижнюю часть эфира.
+    missingSince: v.optional(v.number()),
   })
     .index("by_account_media", ["account", "mediaId"])
     .index("by_posted", ["postedAt"]),
@@ -105,6 +109,23 @@ export default defineSchema({
   })
     .index("by_kind", ["kind"])
     .index("by_at", ["at"]),
+
+  // Лоток идей для роликов: владелец кладёт мысль с экрана сети, раннер завода
+  // на маке забирает самую старую и делает из неё ролик. Модель зовёт раннер по
+  // подписке, а не Convex по ключу, — поэтому здесь только текст и статус.
+  ops_reel_ideas: defineTable({
+    text: v.string(),
+    createdAt: v.number(),
+    status: v.union(v.literal("new"), v.literal("taken"), v.literal("done"), v.literal("failed")),
+    account: v.string(),
+    takenAt: v.optional(v.number()),
+    doneAt: v.optional(v.number()),
+    storyId: v.optional(v.string()),
+    note: v.optional(v.string()),
+    permalink: v.optional(v.string()),
+  })
+    .index("by_status_created", ["status", "createdAt"])
+    .index("by_created", ["createdAt"]),
 
   // Дневной снимок аккаунта: подписчики и расход суточного лимита.
   ops_social_snapshots: defineTable({

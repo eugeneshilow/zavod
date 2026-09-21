@@ -2,9 +2,17 @@ import Link from "next/link";
 import { setChannelState } from "@/app/admin/actions";
 import { renderDoc, resolveDoc, stripTitle } from "@/lib/docs";
 import { moscow, num, type Channel } from "@/lib/reels";
-import { loadSocial, NETWORKS, type NetworkGlance } from "@/lib/social";
+import {
+  dayKey,
+  ideaStatusWord,
+  loadSocial,
+  NETWORKS,
+  type Idea,
+  type NetworkGlance,
+  type Reel,
+} from "@/lib/social";
 import { Box, SectionLabel } from "../../_components/shell";
-import { collectMetricsNow, runQueueNow } from "../actions";
+import { addIdea, collectMetricsNow, runQueueNow } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +21,92 @@ export const dynamic = "force-dynamic";
 
 const button =
   "rounded border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-700 hover:border-zinc-400";
+
+/** Короткий слаг аккаунта: ruvibecoding — «ru», autovibecoding — «auto». */
+function shortAccount(account: string): string {
+  if (!account) return "—";
+  return account.replace(/vibecoding$/, "") || account;
+}
+
+/** Вовлечённость: взаимодействия к охвату, один знак после запятой. */
+function engagement(r: Reel): string {
+  if (r.interactions == null || !r.reach) return "—";
+  return `${((r.interactions / r.reach) * 100).toFixed(1)}%`;
+}
+
+/** Средний просмотр в секундах: площадка отдаёт миллисекунды. */
+function watch(r: Reel): string {
+  if (r.avgWatchMs == null) return "—";
+  return `${(r.avgWatchMs / 1000).toFixed(1)} с`;
+}
+
+const TH = "px-2 py-1 text-right text-[10px] font-medium text-zinc-500";
+const TD = "px-2 py-[3px] text-right tabular-nums";
+
+function ReelRow({ r, muted }: { r: Reel; muted?: boolean }) {
+  const cell = muted ? `${TD} text-zinc-400` : TD;
+  return (
+    <tr className={`border-t border-zinc-100 ${muted ? "text-zinc-400" : ""}`}>
+      <td className="px-2 py-[3px]">
+        {r.permalink ? (
+          <a
+            href={r.permalink}
+            rel="noreferrer"
+            className={muted ? "text-zinc-400 hover:underline" : "text-[#C2410C] hover:underline"}
+          >
+            {moscow(r.postedAt)}
+          </a>
+        ) : (
+          moscow(r.postedAt)
+        )}
+        {r.caption ? (
+          <span className={muted ? "ml-2 text-zinc-400" : "ml-2 text-zinc-500"}>
+            {r.caption.slice(0, 60)}
+          </span>
+        ) : null}
+        {r.missingSince ? (
+          <span className="ml-2 text-zinc-400">удалён {dayKey(r.missingSince)}</span>
+        ) : null}
+      </td>
+      <td className={cell}>{shortAccount(r.account)}</td>
+      <td className={cell}>{num(r.views)}</td>
+      <td className={cell}>{num(r.reach)}</td>
+      <td className={cell}>{num(r.likes)}</td>
+      <td className={cell}>{num(r.comments)}</td>
+      <td className={cell}>{num(r.saved)}</td>
+      <td className={cell}>{num(r.shares)}</td>
+      <td className={cell}>{engagement(r)}</td>
+      <td className={cell}>{watch(r)}</td>
+      <td className={cell}>{r.delta48 == null ? "—" : `+${r.delta48}`}</td>
+    </tr>
+  );
+}
+
+function IdeaList({ ideas }: { ideas: Idea[] }) {
+  if (ideas.length === 0) return <p className="mt-3 text-xs text-zinc-500">лоток пуст</p>;
+  return (
+    <ul className="mt-3 space-y-1 text-xs">
+      {ideas.map((idea) => (
+        <li key={idea.id} className="flex gap-2 border-t border-zinc-100 pt-1">
+          <span className="tabular-nums text-zinc-500">{moscow(idea.createdAt)}</span>
+          <span className="text-zinc-800">{idea.text.slice(0, 90)}</span>
+          <span className="ml-auto whitespace-nowrap text-zinc-500">
+            {ideaStatusWord(idea)}
+            {idea.status === "done" && idea.permalink ? (
+              <a
+                href={idea.permalink}
+                rel="noreferrer"
+                className="ml-2 text-[#C2410C] hover:underline"
+              >
+                пост
+              </a>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -64,8 +158,9 @@ function Actions({ n, channel }: { n: NetworkGlance; channel: Channel }) {
   );
 }
 
-export default async function NetworkPage({ params }: PageProps<"/admin/social/[network]">) {
-  const { network } = await params;
+export default async function NetworkPage(props: PageProps<"/admin/social/[network]">) {
+  const { network } = await props.params;
+  const search = (await props.searchParams) as { idea?: string } | undefined;
   const meta = NETWORKS.find((x) => x.id === network);
   const [social, canon] = await Promise.all([loadSocial(), resolveDoc(["social", network])]);
   const n =
@@ -95,11 +190,7 @@ export default async function NetworkPage({ params }: PageProps<"/admin/social/[
             <Stat
               label="просмотры за 7 дней"
               value={num(n.views7d)}
-              sub={
-                n.best[0]?.views != null
-                  ? `лучший ролик ${num(n.best[0].views)}`
-                  : "по постам цифр нет"
-              }
+              sub={n.top?.views != null ? `лучший ролик ${num(n.top.views)}` : "по постам цифр нет"}
             />
             <Stat
               label="токен"
@@ -126,60 +217,86 @@ export default async function NetworkPage({ params }: PageProps<"/admin/social/[
           >
             <Actions n={n} channel={meta.channel} />
           </Box>
+          {n.id === "instagram" ? (
+            <>
+              <SectionLabel id="ideas">ИДЕЯ — из лотка в ролик</SectionLabel>
+              <Box title="Лоток идей" aside="ops_reel_ideas">
+                <div className="flex flex-wrap items-start gap-3">
+                  <form action={addIdea} className="flex flex-1 flex-col gap-2" data-testid="ideas">
+                    <input type="hidden" name="network" value={n.id} />
+                    <textarea
+                      name="text"
+                      rows={3}
+                      placeholder="Одна новость или мысль: ссылка на источник и два предложения, что в ней интересного"
+                      className="w-full rounded border border-zinc-200 px-2 py-1 text-xs"
+                    />
+                    <button type="submit" className={`${button} self-start`}>
+                      Положить в лоток
+                    </button>
+                    {search?.idea === "empty" ? (
+                      <p className="text-[11px] text-[#C2410C]">
+                        Идея пустая: нечего класть в лоток.
+                      </p>
+                    ) : null}
+                  </form>
+                  <p className="max-w-[280px] text-[11px] text-zinc-500">
+                    идею забирает раннер завода на маке: история по рецепту мозга short-videos,
+                    рендер, очередь публикации
+                  </p>
+                </div>
+                <IdeaList ideas={n.ideas} />
+              </Box>
+            </>
+          ) : null}
           <SectionLabel id="best">ЛУЧШИЕ РОЛИКИ — по просмотрам</SectionLabel>
           <Box title="Эфир сети" aside="data_raw_instagram_media · data_raw_instagram_metrics">
-            {n.best.length === 0 ? (
+            {n.reels.length === 0 && n.deleted.length === 0 ? (
               <p className="text-xs text-zinc-500">
                 {n.id === "telegram"
                   ? "Telegram цифр по постам не отдаёт: только посты по дням на /admin/social."
                   : "В эфире пока ничего нет."}
               </p>
             ) : (
-              <table data-testid="best" className="w-full text-xs">
-                <thead className="bg-zinc-50">
-                  <tr>
-                    <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">
-                      ролик
-                    </th>
-                    <th className="px-2 py-1 text-right text-[10px] font-medium text-zinc-500">
-                      просмотры
-                    </th>
-                    <th className="px-2 py-1 text-right text-[10px] font-medium text-zinc-500">
-                      охват
-                    </th>
-                    <th className="px-2 py-1 text-right text-[10px] font-medium text-zinc-500">
-                      48 ч
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {n.best.map((r) => (
-                    <tr key={r.mediaId} className="border-t border-zinc-100">
-                      <td className="px-2 py-[3px]">
-                        {r.permalink ? (
-                          <a
-                            href={r.permalink}
-                            rel="noreferrer"
-                            className="text-[#C2410C] hover:underline"
-                          >
-                            {moscow(r.postedAt)}
-                          </a>
-                        ) : (
-                          moscow(r.postedAt)
-                        )}
-                        {r.caption ? (
-                          <span className="ml-2 text-zinc-500">{r.caption.slice(0, 60)}</span>
-                        ) : null}
-                      </td>
-                      <td className="px-2 py-[3px] text-right tabular-nums">{num(r.views)}</td>
-                      <td className="px-2 py-[3px] text-right tabular-nums">{num(r.reach)}</td>
-                      <td className="px-2 py-[3px] text-right tabular-nums">
-                        {r.delta48 == null ? "—" : `+${r.delta48}`}
-                      </td>
+              <>
+                <p className="mb-1 text-[10px] text-zinc-500">
+                  в эфире {n.reels.length}
+                  {n.deleted.length > 0 ? ` · удалено ${n.deleted.length}` : ""}
+                </p>
+                <table data-testid="best" className="w-full text-xs">
+                  <thead className="bg-zinc-50">
+                    <tr>
+                      <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">
+                        ролик
+                      </th>
+                      <th className={TH}>аккаунт</th>
+                      <th className={TH}>просмотры</th>
+                      <th className={TH}>охват</th>
+                      <th className={TH}>лайки</th>
+                      <th className={TH}>комм.</th>
+                      <th className={TH}>сохр.</th>
+                      <th className={TH}>репосты</th>
+                      <th className={TH}>вовлеч.</th>
+                      <th className={TH}>ср. просмотр</th>
+                      <th className={TH}>48 ч</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {n.reels.map((r) => (
+                      <ReelRow key={r.mediaId} r={r} />
+                    ))}
+                    {n.deleted.length > 0 ? (
+                      <tr className="border-t border-zinc-200 bg-zinc-50">
+                        <td colSpan={11} className="px-2 py-1 text-[10px] text-zinc-500">
+                          Удалены с площадки — цифры последние известные
+                        </td>
+                      </tr>
+                    ) : null}
+                    {n.deleted.map((r) => (
+                      <ReelRow key={r.mediaId} r={r} muted />
+                    ))}
+                  </tbody>
+                </table>
+              </>
             )}
           </Box>
         </>
