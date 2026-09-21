@@ -20,13 +20,17 @@ import {
   checkLicenses,
   chunkText,
   clipDurations,
+  collapseSilence,
   elevenTempo,
   flatWords,
+  flowGap,
+  gapStats,
   groupBeatsByLimit,
   joinVoiceText,
   layoutBeats,
   layoutFromAlignment,
   mediaFilter,
+  parseFlow,
   parseStory,
   parseVoice,
   rangesInAlignment,
@@ -325,7 +329,7 @@ async function elevenTimed(voice, text, speed, key, dir, context) {
  * здесь не участвует вовсе. Сценарий длиннее предела режется по границам битов,
  * и каждый кусок едет с текстами соседей. Канон — docs/reels.md.
  */
-export async function elevenStoryVoice(story, dir) {
+export async function elevenStoryVoice(story, dir, { collapse } = {}) {
   const voiceDir = path.join(dir, "voice");
   mkdirSync(voiceDir, { recursive: true });
   const key = envValue("ELEVENLABS_API_KEY");
@@ -334,8 +338,11 @@ export async function elevenStoryVoice(story, dir) {
       "Голос eleven просит ELEVENLABS_API_KEY в .env.local (ключ из профиля elevenlabs.io).",
     );
   }
+  const flow = parseFlow(story.flow);
+  const gap = flowGap(flow);
+  const smooth = collapse ?? flow === "continuous";
   const texts = storyVoiceTexts(story);
-  const whole = joinVoiceText(texts);
+  const whole = joinVoiceText(texts, gap);
   const cacheKey = keyOf(storyVoiceKeyParts(story, whole));
   const raw = path.join(voiceDir, `${cacheKey}.pcm`);
   const meta = path.join(voiceDir, `${cacheKey}.json`);
@@ -356,17 +363,36 @@ export async function elevenStoryVoice(story, dir) {
   if (!saved?.spans) {
     // В кеш ложится звук и времена ДО темпа: atempo применяется на выходе,
     // поэтому подбор скорости не стоит ни одного кредита.
-    const groups = groupBeatsByLimit(texts);
+    const groups = groupBeatsByLimit(texts, STORY.eleven.oneShot, gap);
     const pause = Buffer.alloc(Math.round(PCM_RATE * STORY.beatPause) * 2);
     const parts = [];
     const spans = [];
     let at = 0;
     for (const [g, group] of groups.entries()) {
       const pieces = group.map((i) => texts[i]);
-      const answer = await elevenTimed(story.voice, joinVoiceText(pieces), story.speed, key, dir, {
-        previous: g > 0 ? joinVoiceText(groups[g - 1].map((i) => texts[i])) : null,
-        next: g + 1 < groups.length ? joinVoiceText(groups[g + 1].map((i) => texts[i])) : null,
-      });
+      const answer = await elevenTimed(
+        story.voice,
+        joinVoiceText(pieces, gap),
+        story.speed,
+        key,
+        dir,
+        {
+          previous:
+            g > 0
+              ? joinVoiceText(
+                  groups[g - 1].map((i) => texts[i]),
+                  gap,
+                )
+              : null,
+          next:
+            g + 1 < groups.length
+              ? joinVoiceText(
+                  groups[g + 1].map((i) => texts[i]),
+                  gap,
+                )
+              : null,
+        },
+      );
       if (parts.length > 0) {
         parts.push(pause);
         at = round3(at + STORY.beatPause);
@@ -388,15 +414,30 @@ export async function elevenStoryVoice(story, dir) {
     writeFileSync(meta, `${JSON.stringify(saved, null, 2)}\n`);
     fresh = 1;
   }
-  // Темп — последним шагом, и к звуку, и к временам слов сразу.
+  // Сведение, потом темп — оба шага на выходе, оба и к звуку, и к временам.
+  // В кеше лежит звук ДО них, поэтому подбор maxGap не стоит кредитов.
+  let pcm = readFileSync(raw);
+  let spansByBeat = story.beats.map((_, i) => saved.spans[i] || []);
+  const before = gapStats(pcm);
+  let removed = 0;
+  if (smooth) {
+    const counts = spansByBeat.map((list) => list.length);
+    const cut = collapseSilence(pcm, spansByBeat.flat());
+    pcm = cut.pcm;
+    removed = cut.removed;
+    let at = 0;
+    spansByBeat = counts.map((count) => cut.words.slice(at, (at += count)));
+  }
+  const gaps = { before, after: gapStats(pcm), removed, collapsed: smooth };
   const tuned = path.join(dir, "voice.pcm");
-  writeFileSync(tuned, retempoPcm(readFileSync(raw), tempo, voiceDir));
+  writeFileSync(tuned, retempoPcm(pcm, tempo, voiceDir));
   run("ffmpeg", ["-y", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", "1", "-i", tuned, wav]);
   return {
     kind: "aligned",
     wav,
-    spansByBeat: saved.spans.map((list) => scaleSpans(list, tempo)),
+    spansByBeat: spansByBeat.map((list) => scaleSpans(list, tempo)),
     groups: saved.groups,
+    gaps,
     fresh,
   };
 }
@@ -697,6 +738,9 @@ export async function renderStory(storyPath, { voice, music, out } = {}) {
     drift,
     voice: story.voice,
     speed: story.speed,
+    flow: story.flow,
+    // Сколько пауз было и стало и сколько секунд вырезано — только у eleven.
+    gaps: sound.gaps || null,
     // Темп, который реально применили: у v3 он подрезан до края (см. канон).
     tempo: story.voice.engine === "eleven" ? elevenTempo(story.speed) : story.speed,
     format: elevenFormatUsed(),
@@ -727,6 +771,15 @@ export function report(r) {
       : `  озвучено заново битов ${r.resynth} из ${r.beats} · время слов от whisper` +
         ` в ${r.byWhisper} битах, в остальных по буквам`,
   ];
+  // Поток без пауз: сколько их было и стало. Канон — docs/reels.md.
+  if (r.gaps) {
+    const { before, after, removed, collapsed } = r.gaps;
+    lines.push(
+      `  поток: ${r.flow} · пауз ≥${STORY.collapse.heard} с: ${before.count} → ${after.count}` +
+        ` (медиана ${before.median} → ${after.median} с, тишина ${before.share} → ${after.share} %)` +
+        ` · вырезано ${removed} с${collapsed ? "" : " (сведение выключено)"}`,
+    );
+  }
   // Ролик длиннее минуты не останавливает сборку, но о нём говорят вслух:
   // лечится он короче написанным текстом, а не ускорением голоса.
   if (r.expected > STORY.maxSeconds) {

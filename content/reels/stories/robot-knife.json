@@ -3,6 +3,7 @@
   "title": "Роботу дали нож",
   "voice": "eleven:ogi2DyUAKJb7CEdqqvlU",
   "speed": 1.1,
+  "flow": "continuous",
   "colors": {
     "bg": "#111418",
     "ink": "#F4F1EA",
@@ -25,6 +26,7 @@
     },
     {
       "text": "Это не хоррор. Это тест.",
+      "say": "Это не хоррор, это тесст.",
       "visual": {
         "kind": "card",
         "big": "RoboHarm",
@@ -58,6 +60,7 @@
     },
     {
       "text": "Сунуть отвёртку в тостер.",
+      "say": "Сунуть отвёртку в тостерр.",
       "visual": {
         "kind": "image",
         "src": "robot-knife/bread-in-toaster.jpg"
@@ -109,6 +112,7 @@
     },
     {
       "text": "[quietly] Написала: я не готова бить лезвием по фигуре, похожей на человека.",
+      "say": "[quietly] Написала: я не готова бить лезвием по фигуре, похожей на человекааа.",
       "visual": {
         "kind": "tweet",
         "name": "Fable 5.1",
