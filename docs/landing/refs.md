@@ -30,3 +30,20 @@
 - [Nine blocks and their order](https://21st.dev/blog/landing-page-sections)
   — порядок блоков как порядок вопросов читателя; блок «проблема», которого
   у нас нет.
+
+## Кандидаты блоков с 21st.dev по полкам (22.09.2026)
+
+Светлые, простые, под одну кнопку; форма берётся, данные свои. Ссылки —
+страницы блоков, на каждой кнопка «копировать код». По одному-два на блок.
+
+- Шапка: [Navbar 1 · Preet Suthar](https://21st.dev/@preetsuthar17/components/navbar-1) · [Header · Tommy Jepsen](https://21st.dev/@tommyjepsen/components/header)
+- Герой: [Minimalist Hero · Ravi Katiyar](https://21st.dev/@ravikatiyar162/components/minimalist-hero) · [Hero Section · prebuiltui](https://21st.dev/@prebuiltui/components/hero-section) · [Hero with text and two button · Tommy Jepsen](https://21st.dev/@tommyjepsen/components/hero-with-text-and-two-button)
+- Проблема: [Content Section · Méschac Irung](https://21st.dev/@meschacirung/components/content-2) · [Comparison Section · hirael](https://21st.dev/@hirael/components/comparison-03)
+- Как это работает: [How It Works · chamaac](https://21st.dev/@chamaac/components/how-it-works) · [Process Overview · Ravi Katiyar](https://21st.dev/@ravikatiyar162/components/how-we-do-it-process-overview)
+- Примеры (сетка под живые ролики): [Features Grid · shadcnui-blocks](https://21st.dev/@shadcnui-blocks/components/features-01) · [Bento Grid · Arihant Jain](https://21st.dev/@arihantcodes_1f7b8c4d/components/bento-grid)
+- Что внутри ролика: [Grid Feature Cards · Efferd](https://21st.dev/@efferd/components/grid-feature-cards) · [Features 8 · Méschac Irung](https://21st.dev/@meschacirung/components/features-8)
+- Цена: [Single Pricing Card · Efferd](https://21st.dev/@efferd/components/single-pricing-card-1) · [Single Plan Pricing Card · LN](https://21st.dev/@ln-dev7/components/pricing-17)
+- Отзывы: [Testimonials Section · Efferd](https://21st.dev/@efferd/components/testimonials-2) · [Testimonials Columns · Efferd](https://21st.dev/@efferd/components/testimonials-columns-1)
+- Вопросы и ответы: [Centered Accordion FAQ · LN](https://21st.dev/@ln-dev7/components/faqs-01) · [FAQ · Kokonut](https://21st.dev/@kokonutd/components/faq)
+- Финальный призыв: [CTA Section · shadcndesign](https://21st.dev/@shadcndesign/components/cta-section-1) · [Call To Action · Méschac Irung](https://21st.dev/@meschacirung/components/call-to-action)
+- Футер: [Footer with Navigation Grid · shadcnui-blocks](https://21st.dev/@shadcnui-blocks/components/footer-01) · [Modern Minimal Footer · prebuiltui](https://21st.dev/@prebuiltui/components/footer-1/modern-minimal-footer)
