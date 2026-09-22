@@ -78,3 +78,48 @@ export function heroMetric(reels: number, views7d: number | null): string {
   if (views7d === null) return left;
   return `${left} · ${views7d.toLocaleString("ru-RU")} просмотров за неделю`;
 }
+
+/** Блоки, у которых на странице есть свой компонент: серых полос больше нет. */
+export const BUILT_BLOCKS: BlockSlug[] = [
+  "header",
+  "hero",
+  "problem",
+  "how",
+  "examples",
+  "inside",
+  "price",
+  "reviews",
+  "faq",
+  "cta",
+  "footer",
+];
+
+/** Ролик витрины: галерее нужны только файл, адрес поста, подпись и цифры. */
+type ShowcaseReel = {
+  videoUrl: string | null;
+  views: number | null;
+};
+
+/**
+ * Ролики в галерею примеров: только те, у которых есть сам файл (иначе плитке
+ * нечего показать), по просмотрам вниз, не больше n.
+ */
+export function pickShowcase<T extends ShowcaseReel>(reels: T[], n = 6): T[] {
+  return reels
+    .filter((r) => Boolean(r.videoUrl))
+    .sort((a, b) => (b.views ?? -1) - (a.views ?? -1))
+    .slice(0, n);
+}
+
+/**
+ * Подпись под плиткой: первая строка подписи ролика, обрезанная до max знаков
+ * по границе слова. Пустая подпись даёт пустую строку — плитка останется без
+ * названия, а не с многоточием.
+ */
+export function captionLine(caption: string, max = 70): string {
+  const first = (caption ?? "").split("\n")[0].trim();
+  if (first.length <= max) return first;
+  const cut = first.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}

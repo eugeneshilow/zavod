@@ -1,14 +1,15 @@
 "use client";
 
-import React from "react";
 import { motion } from "framer-motion";
 import { Clapperboard, Send, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Блок 1+2 витрины: шапка и герой одним экраном. Форма снята с блока
-// minimalist-hero маркетплейса блоков shadcn: три колонки (текст · картинка на
-// круге · большой заголовок), шапка сверху, подпись снизу. Канон блоков —
-// docs/landing/README.md. Анимация — framer-motion, поэтому файл клиентский.
+// Блок 2 витрины: герой. Форма снята с блока minimalist-hero маркетплейса
+// блоков shadcn: три колонки (текст · картинка на круге · большой заголовок) и
+// подпись снизу. Шапка у донора жила здесь же, но у нас она отдельный блок
+// (components/ui/site-navbar.tsx) — герой оставляет ей место отступом сверху.
+// Канон блоков — docs/landing/README.md. Анимация — framer-motion, поэтому
+// файл клиентский.
 
 /**
  * Значок подвала задаётся ключом, а не компонентом: страница серверная, а
@@ -24,11 +25,6 @@ const SOCIAL_ICONS: Record<SocialIconName, LucideIcon> = {
 };
 
 interface MinimalistHeroProps {
-  logoText: string;
-  navLinks: { label: string; href: string }[];
-  /** Кнопка шапки: на мобиле она же стоит вместо бургера. */
-  ctaLabel: string;
-  ctaHref: string;
   mainText: string;
   readMoreLabel: string;
   readMoreLink: string;
@@ -41,36 +37,6 @@ interface MinimalistHeroProps {
   locationText: string;
   className?: string;
 }
-
-const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
-  <a
-    href={href}
-    className="text-sm font-medium tracking-widest text-foreground/60 transition-colors hover:text-foreground"
-  >
-    {children}
-  </a>
-);
-
-const CtaButton = ({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: React.ReactNode;
-  className?: string;
-}) => (
-  <a
-    href={href}
-    className={cn(
-      "rounded-full border border-foreground/20 px-4 py-2 text-sm font-medium",
-      "transition-colors hover:border-foreground hover:bg-foreground hover:text-background",
-      className,
-    )}
-  >
-    {children}
-  </a>
-);
 
 const SocialIcon = ({
   href,
@@ -97,10 +63,6 @@ const SocialIcon = ({
 };
 
 export const MinimalistHero = ({
-  logoText,
-  navLinks,
-  ctaLabel,
-  ctaHref,
   mainText,
   readMoreLabel,
   readMoreLink,
@@ -114,35 +76,10 @@ export const MinimalistHero = ({
   return (
     <div
       className={cn(
-        "relative flex h-screen min-h-[640px] w-full flex-col items-center justify-between overflow-hidden bg-background p-8 font-sans md:p-12",
+        "relative flex h-screen min-h-[640px] w-full flex-col items-center justify-between overflow-hidden bg-background p-8 pt-24 font-sans md:p-12 md:pt-24",
         className,
       )}
     >
-      <header className="z-30 flex w-full max-w-7xl items-center justify-between gap-4">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-xl font-bold tracking-wider"
-        >
-          {logoText}
-        </motion.div>
-        <div className="hidden items-center space-x-8 md:flex">
-          {navLinks.map((link) => (
-            <NavLink key={link.label} href={link.href}>
-              {link.label}
-            </NavLink>
-          ))}
-        </div>
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <CtaButton href={ctaHref}>{ctaLabel}</CtaButton>
-        </motion.div>
-      </header>
-
       <div className="relative grid w-full max-w-7xl flex-grow grid-cols-1 items-center gap-6 md:grid-cols-3">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
