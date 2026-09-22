@@ -3,6 +3,7 @@
 import { Logo } from "@/components/brand/logo";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { BAND_CLASS, NAVBAR_BAND_CLASS } from "@/lib/layout";
 import { cn } from "@/lib/utils";
 
 // Блок 1 витрины: шапка. Форма снята с блока navbar-1 маркетплейса 21st.dev —
@@ -23,10 +24,11 @@ const CTA_LABEL = "Сделать ролик";
 export function SiteNavbar({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className={cn("fixed inset-x-0 top-4 z-50 px-4", className)}>
+    <header className={cn("fixed inset-x-0 top-4 z-50", BAND_CLASS, className)}>
       <nav
         className={cn(
-          "mx-auto w-full max-w-5xl border border-foreground/10 bg-background/90 px-4 py-2 shadow-lg backdrop-blur",
+          NAVBAR_BAND_CLASS,
+          "border border-foreground/10 bg-background/90 px-4 py-2 shadow-lg backdrop-blur",
           // пилюля круглая, пока список закрыт: с раскрытым списком края спрямляются
           open ? "rounded-3xl" : "rounded-full",
         )}
