@@ -7,6 +7,7 @@ import Link from "next/link";
 export const ATLAS_MODES = [
   { slug: "layout", label: "лендинг", note: "сетка витрины" },
   { slug: "logo", label: "лого", note: "знак и слово" },
+  { slug: "lab", label: "полигон", note: "варианты знака" },
 ] as const;
 
 export type AtlasMode = (typeof ATLAS_MODES)[number]["slug"];
