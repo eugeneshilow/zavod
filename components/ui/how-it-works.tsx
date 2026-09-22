@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { Clapperboard, Link as LinkIcon, Mic, type LucideIcon } from "lucide-react";
 
 // Блок 4 витрины: как это работает. Форма снята с блока how-it-works-01 автора
@@ -28,8 +29,8 @@ const STEPS: { n: string; icon: LucideIcon; title: string; body: string }[] = [
 
 export function HowItWorks() {
   return (
-    <section id="how" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="how" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
             Как это работает

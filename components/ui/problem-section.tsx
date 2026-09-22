@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 // Блок 3 витрины: проблема. Формы «один абзац» на маркетплейсе нет — сделана по
 // лекалу серии LN: подпись капсом, заголовок в две строки слева, абзац справа.
 // Ни карточек, ни кнопок, ни иконок: блок держит остальную страницу, а не
@@ -5,8 +6,8 @@
 
 export function ProblemSection() {
   return (
-    <section id="problem" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="problem" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="grid grid-cols-1 gap-8 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-6">
             <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">

@@ -1,3 +1,4 @@
+import { GridOverlay } from "@/components/brand/grid-overlay";
 import { CtaSection } from "@/components/ui/cta-section";
 import { ExamplesGallery } from "@/components/ui/examples-gallery";
 import { Faq } from "@/components/ui/faq";
@@ -59,11 +60,18 @@ function Placeholder({ block }: { block: LandingBlock }) {
   );
 }
 
-export default async function Home() {
-  const [canon, showcase] = await Promise.all([resolveDoc(["landing"]), loadShowcase()]);
+export default async function Home({ searchParams }: PageProps<"/">) {
+  const [canon, showcase, params] = await Promise.all([
+    resolveDoc(["landing"]),
+    loadShowcase(),
+    searchParams,
+  ]);
   const blocks = landingBlocks(canon?.md ?? "");
+  // «/?grid» — накладка сетки поверх живой витрины (канон — docs/brand/layout.md).
+  const grid = params.grid !== undefined;
   return (
     <main className="flex w-full flex-1 flex-col">
+      {grid ? <GridOverlay /> : null}
       {blocks.map((block) => {
         switch (block.slug) {
           case "header":

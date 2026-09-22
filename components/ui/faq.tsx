@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { ChevronDown } from "lucide-react";
 import { FAQ, TELEGRAM_URL } from "@/lib/landing-copy";
 
@@ -8,8 +9,8 @@ import { FAQ, TELEGRAM_URL } from "@/lib/landing-copy";
 
 export function Faq() {
   return (
-    <section id="faq" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="faq" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
             Вопросы и ответы
