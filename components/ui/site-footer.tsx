@@ -19,7 +19,7 @@ export function SiteFooter() {
       <div className={BAND_CLASS}>
         <div className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-6">
-            <Logo em={18} />
+            <Logo height={54} />
             <p className="mt-3 text-sm text-foreground/70">
               Новость в вертикальный ролик за шесть минут.
             </p>

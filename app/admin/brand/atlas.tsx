@@ -12,6 +12,7 @@ import { useState } from "react";
 
 const VIEWS = [
   { id: "home", label: "главная", src: "/" },
+  { id: "logo", label: "лого", src: "/admin/brand/logo" },
   { id: "lab", label: "полигон лого", src: "/admin/brand/lab" },
 ] as const;
 

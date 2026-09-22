@@ -1,68 +1,53 @@
-import { INK, LOCKUP, MARK, PAPER, WORD, YELLOW, letterPath, type MarkVariant } from "@/lib/brand";
+import { WORD, horizontalSrc, logoFile } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
-// Логотип завода: знак (жёлтый круг с «z») и слово «zavod». Единственный
-// компонент, которым логотип стоит на любой поверхности — шапка витрины,
-// футер, хедер админки; favicon — тот же знак файлом app/icon.svg. Числа
-// берутся из lib/brand.ts (канон — docs/brand/logo.md), здесь их нет.
+// Логотип завода: файлы набора владельца (docs/brand/logo.md), пути — из
+// переносчика lib/brand.ts. Единственный компонент, которым логотип стоит на
+// поверхностях: шапка и футер витрины (primary), хедер админки (inverse).
+// SVG набора — контуры без шрифтов, поэтому надпись одинакова везде.
 
-/** Знак отдельно: размер в px, цветной или одноцветный. */
-export function Mark({
-  size = 24,
-  variant = "color",
+/** Полный логотип: лента и надпись. Высота в px, ширина по пропорции файла. */
+export function Logo({
+  height = 28,
+  variant = "primary",
   className,
 }: {
-  size?: number;
-  variant?: MarkVariant;
+  height?: number;
+  variant?: "primary" | "inverse" | "black" | "white";
   className?: string;
 }) {
-  const half = MARK.size / 2;
   return (
-    <svg
-      viewBox={`0 0 ${MARK.size} ${MARK.size}`}
-      width={size}
-      height={size}
-      role="img"
-      aria-label={WORD}
-      className={cn("shrink-0", className)}
-    >
-      <circle cx={half} cy={half} r={half} fill={variant === "color" ? YELLOW : INK} />
-      <path d={letterPath()} fill={variant === "color" ? INK : PAPER} />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={horizontalSrc(variant)}
+      alt={WORD}
+      height={height}
+      width={Math.round((height * 1312) / 390)}
+      className={cn("block h-auto w-auto shrink-0", className)}
+      style={{ height }}
+    />
   );
 }
 
-/**
- * Знак и слово одной строкой. Кегль слова задаёт всё: диаметр знака и зазор —
- * доли кегля из LOCKUP. Цвет слова наследуется (currentColor), поэтому на
- * тёмном фоне слово белое само, а знак остаётся жёлтым.
- */
-export function Logo({
-  em = 18,
-  variant = "color",
-  word = true,
+/** Отдельный знак: лента без надписи. */
+export function Mark({
+  size = 24,
+  variant = "primary",
   className,
 }: {
-  /** кегль слова, px */
-  em?: number;
-  variant?: MarkVariant;
-  /** false — только знак */
-  word?: boolean;
+  size?: number;
+  variant?: "primary" | "inverse";
   className?: string;
 }) {
   return (
-    <span
-      className={cn("inline-flex items-center font-bold", className)}
-      style={{
-        fontSize: em,
-        gap: em * LOCKUP.gapPerEm,
-        letterSpacing: `${LOCKUP.tracking}em`,
-        fontWeight: LOCKUP.weight,
-        lineHeight: 1,
-      }}
-    >
-      <Mark size={em * LOCKUP.markPerEm} variant={variant} />
-      {word ? <span>{WORD}</span> : null}
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoFile(`mark-${variant}-svg`).path}
+      alt=""
+      aria-hidden
+      width={size}
+      height={size}
+      className={cn("shrink-0", className)}
+    />
   );
 }

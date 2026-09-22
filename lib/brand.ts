@@ -1,90 +1,257 @@
 // Модуль-переносчик канона логотипа (Spec-Driven: эталон — docs/brand/logo.md,
-// поверка — tests/brand.test.ts). Единственный дом чисел знака и написания:
-// компонент Logo, favicon (app/icon.svg) и экран /admin/brand/logo берут
-// геометрию отсюда и своих чисел не знают. Расхождение кода с каноном — баг кода.
+// поверка — tests/brand.test.ts). Логотип завода — набор файлов, который
+// принёс владелец 22.09.2026 (лента-стрелка и наклонная надпись «zavod.today»,
+// палитра бирюзовая). Единственный дом реестра файлов, палитры и правил:
+// компонент Logo, favicon, экран /admin/brand/logo и кнопки скачивания берут
+// пути и числа отсюда и своих не знают.
 
-/** Слово завода: строчными, одним словом, без точки. */
-export const WORD = "zavod";
+/** Слово завода в надписи логотипа. */
+export const WORD = "zavod.today";
 
-/** Цвета логотипа: жёлтый круга — тот же, что круг героя витрины. */
-export const YELLOW = "#F5B700";
-export const INK = "#000000";
-export const PAPER = "#FFFFFF";
-
-/**
- * Знак: жёлтый круг и чёрная геометрическая «z» из трёх штрихов. Числа — в
- * юнитах квадрата 1024 (таблица «Числа знака» канона). Буква строится из
- * прямых, не из шрифта, поэтому favicon и знак на странице совпадают до
- * пикселя и не зависят от загрузки Inter.
- */
-export const MARK = {
-  /** сторона квадрата знака, юниты */
-  size: 1024,
-  /** буква: левый край, правый край, верх, низ — юниты */
-  left: 296,
-  right: 728,
-  top: 296,
-  bottom: 728,
-  /** толщина горизонтальных штрихов, юниты */
-  stroke: 96,
-  /** горизонтальный сдвиг кромок диагонали, юниты: даёт толщину диагонали ≈ штриху */
-  diagonal: 152,
+/** Палитра набора (sRGB), файл набора — public/brand/logo/brand/palette.json. */
+export const PALETTE = {
+  /** основной, лента */
+  teal: "#00BFA6",
+  /** сгиб ленты */
+  fold: "#00796F",
+  /** надпись и тёмные поверхности */
+  ink: "#063B3B",
+  /** инверсия на тёмном */
+  mint: "#B6F5E7",
+  mintFold: "#4BD6BA",
+  /** светлая поверхность */
+  paper: "#F4FBF9",
+  black: "#111111",
+  white: "#FFFFFF",
 } as const;
 
-/** Написание рядом со знаком: доли кегля слова. */
-export const LOCKUP = {
-  /** диаметр знака в кеглях слова */
-  markPerEm: 1.25,
-  /** зазор между знаком и словом в кеглях слова */
-  gapPerEm: 0.45,
-  /** разрядка слова, em */
-  tracking: 0.05,
-  /** вес Inter */
-  weight: 700,
+/** Корень набора в публичной папке сайта. */
+export const LOGO_ROOT = "/brand/logo";
+
+export type LogoKind = "horizontal" | "mark" | "square" | "web";
+export type LogoVariant =
+  "primary" | "inverse" | "black" | "white" | "dark" | "maskable" | "favicon" | "touch";
+
+export type LogoFile = {
+  id: string;
+  kind: LogoKind;
+  variant: LogoVariant;
+  format: "svg" | "png" | "ico";
+  /** путь от корня сайта */
+  path: string;
+  /** размер растра, px; у svg — размер холста */
+  size: string;
+  /** для чего файл, одной фразой */
+  use: string;
+};
+
+/** Реестр файлов набора: таблица «Файлы» канона logo.md — то же, по id. */
+export const LOGO_FILES: LogoFile[] = [
+  {
+    id: "horizontal-primary-svg",
+    kind: "horizontal",
+    variant: "primary",
+    format: "svg",
+    path: `${LOGO_ROOT}/horizontal/svg/zavod-horizontal-primary.svg`,
+    size: "1312×390",
+    use: "полный логотип на светлом: шапка и футер сайта, документы",
+  },
+  {
+    id: "horizontal-inverse-svg",
+    kind: "horizontal",
+    variant: "inverse",
+    format: "svg",
+    path: `${LOGO_ROOT}/horizontal/svg/zavod-horizontal-inverse.svg`,
+    size: "1312×390",
+    use: "полный логотип на тёмном: хедер админки, тёмные обложки",
+  },
+  {
+    id: "horizontal-black-svg",
+    kind: "horizontal",
+    variant: "black",
+    format: "svg",
+    path: `${LOGO_ROOT}/horizontal/svg/zavod-horizontal-black.svg`,
+    size: "1312×390",
+    use: "одноцветный чёрный: печать, документы без цвета",
+  },
+  {
+    id: "horizontal-white-svg",
+    kind: "horizontal",
+    variant: "white",
+    format: "svg",
+    path: `${LOGO_ROOT}/horizontal/svg/zavod-horizontal-white.svg`,
+    size: "1312×390",
+    use: "одноцветный белый: поверх фото и видео",
+  },
+  {
+    id: "horizontal-primary-png",
+    kind: "horizontal",
+    variant: "primary",
+    format: "png",
+    path: `${LOGO_ROOT}/horizontal/png/zavod-horizontal-primary@2x.png`,
+    size: "2624×780",
+    use: "полный логотип для сервисов без SVG: обложка канала, презентации",
+  },
+  {
+    id: "horizontal-inverse-png",
+    kind: "horizontal",
+    variant: "inverse",
+    format: "png",
+    path: `${LOGO_ROOT}/horizontal/png/zavod-horizontal-inverse@2x.png`,
+    size: "2624×780",
+    use: "полный логотип на тёмном для сервисов без SVG",
+  },
+  {
+    id: "mark-primary-svg",
+    kind: "mark",
+    variant: "primary",
+    format: "svg",
+    path: `${LOGO_ROOT}/mark/svg/zavod-mark-primary.svg`,
+    size: "512×512",
+    use: "отдельный знак на светлом",
+  },
+  {
+    id: "mark-inverse-svg",
+    kind: "mark",
+    variant: "inverse",
+    format: "svg",
+    path: `${LOGO_ROOT}/mark/svg/zavod-mark-inverse.svg`,
+    size: "512×512",
+    use: "отдельный знак на тёмном",
+  },
+  {
+    id: "mark-primary-png",
+    kind: "mark",
+    variant: "primary",
+    format: "png",
+    path: `${LOGO_ROOT}/mark/png/zavod-mark-primary@2x.png`,
+    size: "1024×1024",
+    use: "знак с прозрачным фоном: водяной знак на роликах",
+  },
+  {
+    id: "square-primary-png",
+    kind: "square",
+    variant: "primary",
+    format: "png",
+    path: `${LOGO_ROOT}/square/png/zavod-square-primary-1024.png`,
+    size: "1024×1024",
+    use: "аватар на бирюзовом со скруглением: площадка коротких видео, Telegram",
+  },
+  {
+    id: "square-dark-png",
+    kind: "square",
+    variant: "dark",
+    format: "png",
+    path: `${LOGO_ROOT}/square/png/zavod-square-dark-1024.png`,
+    size: "1024×1024",
+    use: "аватар на петрольном: YouTube, тёмные профили",
+  },
+  {
+    id: "square-maskable-png",
+    kind: "square",
+    variant: "maskable",
+    format: "png",
+    path: `${LOGO_ROOT}/square/png/zavod-square-maskable-1024.png`,
+    size: "1024×1024",
+    use: "квадрат без скруглений: сервисы, которые режут маску сами",
+  },
+  {
+    id: "square-black-png",
+    kind: "square",
+    variant: "black",
+    format: "png",
+    path: `${LOGO_ROOT}/square/png/zavod-square-black-1024.png`,
+    size: "1024×1024",
+    use: "чёрный квадратный аватар: сервисы без цвета",
+  },
+  {
+    id: "favicon-svg",
+    kind: "web",
+    variant: "favicon",
+    format: "svg",
+    path: `${LOGO_ROOT}/web/favicon.svg`,
+    size: "512×512",
+    use: "закладка браузера: одноцветная лента на петрольном, читается в 16 px",
+  },
+  {
+    id: "favicon-ico",
+    kind: "web",
+    variant: "favicon",
+    format: "ico",
+    path: `${LOGO_ROOT}/web/favicon.ico`,
+    size: "16 · 32 · 48",
+    use: "закладка для старых браузеров",
+  },
+  {
+    id: "touch-icon-png",
+    kind: "web",
+    variant: "touch",
+    format: "png",
+    path: `${LOGO_ROOT}/web/app/icon-180.png`,
+    size: "180×180",
+    use: "иконка на домашнем экране iPhone",
+  },
+];
+
+export function logoFile(id: string): LogoFile {
+  const file = LOGO_FILES.find((f) => f.id === id);
+  if (!file) throw new Error(`нет файла логотипа «${id}»`);
+  return file;
+}
+
+/** Файл полного логотипа по варианту: шапка, футер, хедер берут его отсюда. */
+export function horizontalSrc(variant: "primary" | "inverse" | "black" | "white"): string {
+  return logoFile(`horizontal-${variant}-svg`).path;
+}
+
+/** Кнопки скачивания по площадкам: подпись · что за файл · id из реестра. */
+export const DOWNLOADS: { label: string; note: string; fileId: string }[] = [
+  {
+    label: "Площадка коротких видео",
+    note: "аватар профиля, квадрат 1024 со скруглением на бирюзовом",
+    fileId: "square-primary-png",
+  },
+  {
+    label: "Telegram",
+    note: "аватар канала, квадрат 1024 на бирюзовом",
+    fileId: "square-primary-png",
+  },
+  { label: "YouTube · аватар", note: "квадрат 1024 на петрольном", fileId: "square-dark-png" },
+  {
+    label: "YouTube · обложка и презентации",
+    note: "полный логотип PNG на светлом, 2624×780",
+    fileId: "horizontal-primary-png",
+  },
+  {
+    label: "Тёмные обложки",
+    note: "полный логотип PNG на тёмном, 2624×780",
+    fileId: "horizontal-inverse-png",
+  },
+  {
+    label: "Водяной знак на роликах",
+    note: "знак с прозрачным фоном, 1024",
+    fileId: "mark-primary-png",
+  },
+  {
+    label: "Сайт и документы",
+    note: "полный логотип SVG на светлом",
+    fileId: "horizontal-primary-svg",
+  },
+  { label: "Печать без цвета", note: "чёрный полный логотип SVG", fileId: "horizontal-black-svg" },
+  {
+    label: "Поверх фото и видео",
+    note: "белый полный логотип SVG",
+    fileId: "horizontal-white-svg",
+  },
+  { label: "Закладка браузера", note: "favicon SVG", fileId: "favicon-svg" },
+];
+
+/** Правила применения из набора. */
+export const RULES = {
+  /** минимальная ширина полного логотипа, px */
+  minHorizontal: 180,
+  /** минимальный размер отдельного цветного знака, px */
+  minMark: 32,
+  /** свободное поле вокруг знака — доля его высоты */
+  clearSpace: 0.25,
 } as const;
-
-/** Охранное поле вокруг логотипа: доля диаметра знака с каждой стороны. */
-export const CLEAR_SPACE = 0.5;
-
-/** Меньше — не ставить, px. */
-export const MIN_SIZE = { mark: 16, word: 12 } as const;
-
-/** Путь буквы «z»: верхний штрих, диагональ из правого верха в левый низ, нижний штрих. */
-export function letterPath(): string {
-  const { left: l, right: r, top: t, bottom: b, stroke: s, diagonal: d } = MARK;
-  const topEdge = t + s; // низ верхнего штриха
-  const bottomEdge = b - s; // верх нижнего штриха
-  return [
-    `M ${l} ${t}`,
-    `H ${r}`,
-    `V ${topEdge}`,
-    `L ${l + d} ${bottomEdge}`,
-    `H ${r}`,
-    `V ${b}`,
-    `H ${l}`,
-    `V ${bottomEdge}`,
-    `L ${r - d} ${topEdge}`,
-    `H ${l}`,
-    "Z",
-  ].join(" ");
-}
-
-export type MarkVariant = "color" | "mono";
-
-/**
- * SVG знака строкой: цветной (жёлтый круг, чёрная буква) или одноцветный
- * (чёрный круг, белая буква — для печати и мест, где жёлтого нет).
- * Тот же текст лежит в app/icon.svg: favicon — копия, тест сверяет.
- */
-export function markSvg(variant: MarkVariant = "color"): string {
-  const { size } = MARK;
-  const half = size / 2;
-  const circle = variant === "color" ? YELLOW : INK;
-  const letter = variant === "color" ? INK : PAPER;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="${WORD}">` +
-    `<circle cx="${half}" cy="${half}" r="${half}" fill="${circle}"/>` +
-    `<path d="${letterPath()}" fill="${letter}"/>` +
-    `</svg>\n`
-  );
-}

@@ -61,7 +61,7 @@ export function TopNav({ tree }: { tree: NavNode }) {
             chain.length === 1 ? "text-[#ff7a45]" : "text-white hover:text-zinc-300"
           }`}
         >
-          <Logo em={14} />
+          <Logo height={24} variant="inverse" />
         </Link>
         {zones.map((zone) => {
           const isActive = chain.includes(zone);
