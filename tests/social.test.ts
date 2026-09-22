@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { findMissing } from "@/convex/lib/instagram_media";
 import {
   attachIdeas,
@@ -16,10 +16,25 @@ import {
   toReel,
   watchThrough,
   type Idea,
+  type NetworkGlance,
   type Reel,
+  type SocialData,
 } from "@/lib/social";
 import SocialPage from "@/app/admin/social/page";
 import NetworkPage from "@/app/admin/social/[network]/page";
+
+// Экран сети читает данные одной функцией, поэтому подмена одна: пока в
+// mocked.data пусто — работает настоящая loadSocial (её и проверяет тест без
+// пропуска к базе); положили данные — экран рисует их.
+const mocked = vi.hoisted(() => ({ data: null as SocialData | null }));
+
+vi.mock("@/lib/social", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/social")>();
+  return {
+    ...actual,
+    loadSocial: async (now?: number) => mocked.data ?? (await actual.loadSocial(now)),
+  };
+});
 
 // Зона social: раскладка очереди по дням и оба экрана без пропуска к базе
 // честно говорят причину. Канон — docs/social/README.md.
@@ -326,5 +341,111 @@ describe("цифры ролика: досмотр, повторы, вовлеч�
     expect(replays({ views: 10, reach: 0 })).toBeNull();
     expect(engagementRate({ interactions: 2, reach: 184 })).toBeCloseTo(1.087, 2);
     expect(engagementRate({ interactions: null, reach: 184 })).toBeNull();
+  });
+});
+
+describe("экран сети с данными", () => {
+  /** Сеть с одной идеей в работе, одной готовой и одним роликом в эфире. */
+  function network(): NetworkGlance {
+    const base = {
+      id: "instagram" as const,
+      label: "Площадка коротких видео",
+      door: { on: true, reason: "включено", at: now },
+      accounts: [],
+      followers: 10,
+      quotaUsage: 1,
+      quotaTotal: 100,
+      capturedAt: now,
+      posts7d: 1,
+      views7d: 253,
+      days: dayGrid(now),
+      deleted: [],
+      waiting: 0,
+      failed: 0,
+    };
+    const ideas: Idea[] = [
+      {
+        id: "i1",
+        text: "Тред про агентов в проде https://x.com/rakshaa_t/status/1",
+        createdAt: now,
+        status: "pending",
+        takenAt: null,
+        note: null,
+        permalink: null,
+        phase: null,
+        phaseAt: null,
+        storyTitle: null,
+        storyWords: null,
+        videoSeconds: null,
+        writer: null,
+        voice: null,
+        totalCostUsd: null,
+        elapsedMs: null,
+        videoUrl: null,
+        posted: false,
+        postedMediaId: null,
+        queueCount: 0,
+        queueAt: null,
+        error: null,
+      },
+      {
+        id: "i2",
+        text: "Юзкейсы Джева",
+        createdAt: now - 60 * 60 * 1000,
+        status: "done",
+        takenAt: now - 60 * 60 * 1000,
+        note: null,
+        permalink: null,
+        phase: null,
+        phaseAt: null,
+        storyTitle: "Дизайнеру дали Джев",
+        storyWords: 107,
+        videoSeconds: 46,
+        writer: {
+          model: "claude-fable-5-1",
+          inputTokens: 38_900,
+          outputTokens: 2_100,
+          costUsd: 0.19,
+          ms: 120_000,
+        },
+        voice: { model: "eleven_v3", chars: 690, costUsd: 0.12 },
+        totalCostUsd: 0.31,
+        elapsedMs: 6 * 60_000,
+        videoUrl: "https://storage.example/reel.mp4",
+        posted: false,
+        postedMediaId: null,
+        queueCount: 2,
+        queueAt: now,
+        error: null,
+      },
+    ];
+    const reel = attachIdeas(
+      [toReel({ mediaId: "m9", postedAt: now - DAY, metrics: { views: 253, reach: 184 } })],
+      [{ ...ideas[1], posted: true, postedMediaId: "m9" }],
+    );
+    return { ...base, ideas, ideasCost7d: 0.94, reels: reel, top: reel[0] };
+  }
+
+  it("рисует таблицу идей с фазами, ценой и кнопками, а эфир — с ценой ролика", async () => {
+    mocked.data = { networks: [network()], days: dayGrid(now), now };
+    try {
+      const html = renderToStaticMarkup(
+        await NetworkPage({ params: Promise.resolve({ network: "instagram" }) } as never),
+      );
+      expect(html).toContain('data-testid="ideas-table"');
+      expect(html).toContain("ждёт выбора");
+      expect(html).toContain("В работу");
+      expect(html).toContain("Переписать");
+      expect(html).toContain("x.com");
+      expect(html).toContain("Дизайнеру дали Джев");
+      expect(html).toContain("Fable 5.1 · 38,9k → 2,1k · $0.19");
+      expect(html).toContain("итого $0.31 · 6 мин");
+      expect(html).toContain("потрачено за неделю $0.94");
+      // Нижняя таблица: цена ролика и пометка, что он родился из идеи.
+      expect(html).toContain("из идеи");
+      expect(html).toContain("$0.31");
+    } finally {
+      mocked.data = null;
+    }
   });
 });
