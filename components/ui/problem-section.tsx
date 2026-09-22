@@ -8,15 +8,15 @@ export function ProblemSection() {
     <section id="problem" className="bg-background py-20 md:py-28">
       <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-12 md:gap-12">
-          <div className="md:col-span-5">
+          <div className="md:col-span-6">
             <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
               Проблема
             </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-pretty md:text-5xl">
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-pretty md:text-4xl lg:text-5xl">
               Новость живёт день. Ролик по ней делают неделю.
             </h2>
           </div>
-          <div className="md:col-span-7 md:pt-10">
+          <div className="md:col-span-6 md:pt-10">
             <p className="text-lg leading-relaxed text-foreground/70">
               Пока редактор пишет сценарий, монтажёр режет, а диктор записывает, новость остывает. К
               вечеру её уже пересказали все, и ролик выходит в пустоту. Завод делает ролик, пока
