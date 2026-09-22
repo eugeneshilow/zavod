@@ -6,8 +6,9 @@ import { ConvexClientProvider } from "@/components/convex-provider";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "zavod",
-  description: "Проект, собранный как Spec-Driven Company",
+  title: "zavod — новость в вертикальный ролик за шесть минут",
+  description:
+    "Вставьте ссылку на новость и через шесть минут получите вертикальный ролик с голосом, карточками и субтитрами.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

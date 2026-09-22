@@ -157,7 +157,6 @@ Base UI — совпадает с пресетом `base-nova` завода; д�
 - `veil-integrations-1` — сверху CSS-схема: 3 горизонтальные линии с 6 логотипами-пилюлями и своим логотипом в центре, под ней центрированный заголовок, абзац и кнопка-ссылка · deps: @tailark-oss/veil-button, veil-logo + 6 core-SVG (clerk, firebase, linear, slack, supabase, vercel), lucide-react, next/link · dark-only: нет · размер: 84
 - `veil-integrations-2` — то же, но схема круговая: свой логотип в центре, 6 логотипов на пунктирных орбитах; под ней заголовок, абзац и кнопка-ссылка · deps: те же (@tailark-oss/veil-button, veil-logo, 6 core-SVG, lucide-react, next/link) · dark-only: нет · размер: 80
 
-
 ## Что важно по итогу разбора
 
 - Жёстко тёмных блоков нет: все три набора живут на токенах темы.
