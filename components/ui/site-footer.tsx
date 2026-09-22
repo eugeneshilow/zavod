@@ -1,3 +1,4 @@
+import { Logo } from "@/components/brand/logo";
 import { TELEGRAM_URL } from "@/lib/landing-copy";
 
 // Блок 11 витрины: футер. Форма снята с блока footer-17 автора LN (21st.dev):
@@ -17,7 +18,7 @@ export function SiteFooter() {
       <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-6">
-            <p className="text-lg font-bold tracking-wider">zavod</p>
+            <Logo em={18} />
             <p className="mt-3 text-sm text-foreground/70">
               Новость в вертикальный ролик за шесть минут.
             </p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { Logo } from "@/components/brand/logo";
 import { breadcrumbFor, type NavNode } from "@/lib/nav-tree";
 
 // Хедер админки: один на все экраны, строится из дерева docs/ (lib/docs.ts,
@@ -60,7 +61,7 @@ export function TopNav({ tree }: { tree: NavNode }) {
             chain.length === 1 ? "text-[#ff7a45]" : "text-white hover:text-zinc-300"
           }`}
         >
-          {tree.label}
+          <Logo em={14} />
         </Link>
         {zones.map((zone) => {
           const isActive = chain.includes(zone);
