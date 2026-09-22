@@ -30,11 +30,11 @@ export function Tabs({ active }: { active: string }) {
         })}
       </nav>
       <div className="flex-1" />
-      <Button variant="secondary" size="sm">
+      <Button variant="outline" size="sm">
         <CalendarDays className="size-4" aria-hidden />
         Месяц
       </Button>
-      <Button variant="secondary" size="sm">
+      <Button variant="outline" size="sm">
         <Download className="size-4" aria-hidden />
         Отчёт
       </Button>

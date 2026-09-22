@@ -187,6 +187,7 @@ describe("сборка чисел", () => {
     expect(reelTitle("Сюжет", "подпись")).toBe("Сюжет");
     expect(reelTitle(null, "#тег первая строка\nвторая")).toBe("первая строка");
     expect(reelTitle(null, "x".repeat(90))).toHaveLength(70);
+    expect(reelTitle(null, "Юзкейсы Джева https://x.com/a/status/1")).toBe("Юзкейсы Джева");
   });
 });
 

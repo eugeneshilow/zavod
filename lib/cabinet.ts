@@ -135,13 +135,19 @@ export type CabinetData = {
   rows: CabinetRow[];
 };
 
-/** Заголовок ролика: название сюжета, иначе первая строка подписи без хэштегов. */
+/** Заголовок ролика: название сюжета, иначе первая строка подписи без ссылок и хэштегов. */
 export function reelTitle(storyTitle: string | null, caption: string): string {
   const fromStory = (storyTitle ?? "").trim();
   if (fromStory) return fromStory;
   const line = caption
     .split("\n")
-    .map((l) => l.replace(/#\S+/g, "").trim())
+    .map((l) =>
+      l
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/#\S+/g, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
     .find((l) => l.length > 0);
   const text = line ?? "Ролик";
   return text.length > 70 ? `${text.slice(0, 69).trimEnd()}…` : text;
