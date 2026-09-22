@@ -5,7 +5,7 @@ import {
   BAND,
   BAND_CLASS,
   COLUMNS,
-  EXCEPTIONS,
+  NAVBAR,
   RHYTHM,
   SECTION_CLASS,
   axisX,
@@ -29,7 +29,6 @@ function canonNumber(label: string): number {
 
 describe("сетка витрины: канон и переносчик", () => {
   it("полоса, поля, колонки и ритм совпадают с каноном", () => {
-    expect(canonNumber("Полоса контента")).toBe(BAND.width);
     expect(canonNumber("Поля на мобиле")).toBe(BAND.edgeMobile);
     expect(canonNumber("Поля от md")).toBe(BAND.edgeDesktop);
     expect(canonNumber("Колонок")).toBe(COLUMNS.count);
@@ -39,8 +38,8 @@ describe("сетка витрины: канон и переносчик", () => 
   });
 
   it("оси накладки: три, и они совпадают с каноном", () => {
-    expect(canonNumber("Шапка: высота пилюли")).toBe(EXCEPTIONS.navbarHeight);
-    expect(AXES.H1).toBe(EXCEPTIONS.navbarTop + EXCEPTIONS.navbarHeight);
+    expect(canonNumber("Шапка: высота пилюли")).toBe(NAVBAR.height);
+    expect(AXES.H1).toBe(NAVBAR.top + NAVBAR.height);
     const row = (id: string) => canon.split("\n").find((l) => l.startsWith(`| ${id} `)) ?? "";
     expect(Number(row("V1").split("|")[3])).toBe(axisX(1440).V1);
     expect(Number(row("V2").split("|")[3])).toBe(axisX(1440).V2);
@@ -52,22 +51,23 @@ describe("сетка витрины: канон и переносчик", () => 
     expect(overlay.match(/<AxisTag id="(V1|V2|H1)"/g)).toHaveLength(3);
   });
 
-  it("исключения совпадают с каноном", () => {
-    expect(canonNumber("Шапка: полоса")).toBe(EXCEPTIONS.navbarWidth);
-    expect(canonNumber("Шапка: отступ сверху")).toBe(EXCEPTIONS.navbarTop);
-    expect(canonNumber("Герой: полоса")).toBe(EXCEPTIONS.heroWidth);
-    expect(canonNumber("Герой: поля на мобиле")).toBe(EXCEPTIONS.heroEdgeMobile);
-    expect(canonNumber("Герой: поля от md")).toBe(EXCEPTIONS.heroEdgeDesktop);
+  it("шапка совпадает с каноном и стоит на полосе", () => {
+    expect(canonNumber("Шапка: отступ сверху")).toBe(NAVBAR.top);
+    const navbar = readFileSync("components/ui/site-navbar.tsx", "utf8");
+    expect(navbar).toMatch(/BAND_CLASS/);
+    expect(navbar).toMatch(/NAVBAR_BAND_CLASS/);
+    expect(navbar).not.toMatch(/max-w-5xl|max-w-6xl/);
   });
 
   it("классы переносчика несут числа канона (шкала Tailwind: 4 px на единицу)", () => {
-    expect(BAND_CLASS).toContain("max-w-6xl"); // 72rem = 1152
-    expect(BAND.width).toBe(72 * 16);
+    expect(BAND_CLASS).toContain(`max-w-[${BAND.width}px]`);
+    expect(BAND.width - BAND.edgeDesktop * 2).toBe(1280); // сетка героя
+    expect(canonNumber("Полоса с полями")).toBe(BAND.width);
     expect(BAND_CLASS).toContain(`px-${BAND.edgeMobile / 4}`);
     expect(BAND_CLASS).toContain(`md:px-${BAND.edgeDesktop / 4}`);
     expect(SECTION_CLASS).toContain(`py-${RHYTHM.sectionMobile / 4}`);
     expect(SECTION_CLASS).toContain(`md:py-${RHYTHM.sectionDesktop / 4}`);
-    expect(Math.round(columnWidth())).toBe(67);
+    expect(Math.round(columnWidth())).toBe(85);
   });
 
   it("блоки витрины берут полосу и секцию из переносчика", () => {
@@ -75,7 +75,7 @@ describe("сетка витрины: канон и переносчик", () => 
     for (const file of readdirSync("components/ui")) {
       if (exceptions.has(file)) continue;
       const src = readFileSync(`components/ui/${file}`, "utf8");
-      expect(src, file).not.toMatch(/max-w-6xl|py-20 md:py-28/);
+      expect(src, file).not.toMatch(/max-w-6xl|max-w-\[1376px\]|py-20 md:py-28/);
       expect(src, file).toMatch(/BAND_CLASS/);
     }
   });

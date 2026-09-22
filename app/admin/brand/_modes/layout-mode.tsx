@@ -1,4 +1,4 @@
-import { BAND, COLUMNS, EXCEPTIONS, RHYTHM, columnWidth } from "@/lib/layout";
+import { BAND, COLUMNS, NAVBAR, RHYTHM, columnWidth } from "@/lib/layout";
 import { renderDoc, resolveDoc, stripTitle } from "@/lib/docs";
 import { Box, SectionLabel } from "../../_components/shell";
 
@@ -22,27 +22,17 @@ function GridScheme() {
       aria-label="Схема сетки витрины"
     >
       <rect x="0" y="0" width={viewport} height={h} fill="#ffffff" />
-      {/* герой: полоса 1280 */}
+      {/* шапка: пилюля на полосе */}
       <rect
-        x={x(EXCEPTIONS.heroWidth)}
-        y="8"
-        width={EXCEPTIONS.heroWidth}
-        height={h - 16}
-        fill="none"
-        stroke="#0ea5e9"
-        strokeDasharray="8 6"
-      />
-      {/* шапка: пилюля 1024 */}
-      <rect
-        x={x(EXCEPTIONS.navbarWidth)}
-        y={EXCEPTIONS.navbarTop}
-        width={EXCEPTIONS.navbarWidth}
+        x={x(BAND.width) + BAND.edgeDesktop}
+        y={NAVBAR.top}
+        width={BAND.width - BAND.edgeDesktop * 2}
         height="40"
         rx="20"
         fill="none"
         stroke="#d946ef"
       />
-      {/* полоса контента 1152 с полями */}
+      {/* полоса контента с полями */}
       <rect
         x={x(BAND.width)}
         y="80"
@@ -66,11 +56,8 @@ function GridScheme() {
         полоса {BAND.width} · поля {BAND.edgeDesktop} · {COLUMNS.count} колонок по {Math.round(col)}{" "}
         · зазор {COLUMNS.gutter} · внутри {inner}
       </text>
-      <text x={x(EXCEPTIONS.heroWidth) + 8} y={h - 22} fontSize="12" fill="#0ea5e9">
-        герой {EXCEPTIONS.heroWidth}, поля {EXCEPTIONS.heroEdgeDesktop}
-      </text>
-      <text x={x(EXCEPTIONS.navbarWidth) + 8} y="76" fontSize="12" fill="#d946ef">
-        шапка {EXCEPTIONS.navbarWidth}, отступ сверху {EXCEPTIONS.navbarTop}
+      <text x={x(BAND.width) + BAND.edgeDesktop + 8} y="76" fontSize="12" fill="#d946ef">
+        шапка на полосе, отступ сверху {NAVBAR.top}
       </text>
     </svg>
   );
@@ -79,10 +66,10 @@ function GridScheme() {
 const BLOCKS: { block: string; band: string; grid: string }[] = [
   {
     block: "Шапка",
-    band: `пилюля ${EXCEPTIONS.navbarWidth}, top ${EXCEPTIONS.navbarTop}`,
+    band: `${BAND.width}, пилюля top ${NAVBAR.top}`,
     grid: "три равные зоны",
   },
-  { block: "Герой", band: `${EXCEPTIONS.heroWidth}, во весь экран`, grid: "три колонки" },
+  { block: "Герой", band: `${BAND.width}, во весь экран`, grid: "три колонки" },
   { block: "Проблема", band: `${BAND.width}`, grid: "12: заголовок 6 + абзац 6" },
   { block: "Как это работает", band: `${BAND.width}`, grid: "три карточки" },
   { block: "Примеры", band: `${BAND.width}`, grid: "три плитки 9:16" },
@@ -136,14 +123,7 @@ export async function LayoutMode() {
                   "Ритм секций: мобиль / десктоп, px",
                   `${RHYTHM.sectionMobile} / ${RHYTHM.sectionDesktop}`,
                 ],
-                [
-                  "Шапка: полоса / отступ сверху, px",
-                  `${EXCEPTIONS.navbarWidth} / ${EXCEPTIONS.navbarTop}`,
-                ],
-                [
-                  "Герой: полоса / поля, px",
-                  `${EXCEPTIONS.heroWidth} / ${EXCEPTIONS.heroEdgeMobile}–${EXCEPTIONS.heroEdgeDesktop}`,
-                ],
+                ["Шапка: отступ сверху / высота, px", `${NAVBAR.top} / ${NAVBAR.height}`],
               ] as const
             ).map(([label, value]) => (
               <tr key={label}>

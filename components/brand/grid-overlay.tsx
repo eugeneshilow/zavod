@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { AXES, BAND, EXCEPTIONS, axisX } from "@/lib/layout";
+import { AXES, BAND, NAVBAR, axisX } from "@/lib/layout";
 
 // Накладка сетки на живую витрину: «/?grid» рисует поверх страницы три оси —
 // V1 и V2 по внутренним краям полосы контента (оранжевые, оси контента) и H1
@@ -121,8 +121,7 @@ export function GridOverlay() {
             оранж — оси контента: V1 {Math.round(x.V1)} · V2 {Math.round(x.V2)}
           </span>
           <span className="block" style={{ color: "#00E070" }}>
-            зелёная — ось рамы: H1 {AXES.H1} (шапка {EXCEPTIONS.navbarTop} +{" "}
-            {EXCEPTIONS.navbarHeight})
+            зелёная — ось рамы: H1 {AXES.H1} (шапка {NAVBAR.top} + {NAVBAR.height})
           </span>
         </div>
       </div>
