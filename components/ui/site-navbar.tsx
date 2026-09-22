@@ -1,5 +1,6 @@
 "use client";
 
+import { Logo } from "@/components/brand/logo";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,8 +32,8 @@ export function SiteNavbar({ className }: { className?: string }) {
         )}
       >
         <div className="flex items-center justify-between gap-4 md:grid md:grid-cols-3">
-          <a href="#" className="text-lg font-bold tracking-wider">
-            zavod
+          <a href="#" aria-label="zavod, наверх">
+            <Logo em={18} />
           </a>
 
           <div className="hidden items-center justify-center gap-6 md:flex lg:gap-8">
