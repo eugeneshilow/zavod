@@ -2,13 +2,26 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { type LucideIcon } from "lucide-react";
+import { Clapperboard, Send, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Блок 1+2 витрины: шапка и герой одним экраном. Форма снята с блока
 // minimalist-hero маркетплейса блоков shadcn: три колонки (текст · картинка на
 // круге · большой заголовок), шапка сверху, подпись снизу. Канон блоков —
 // docs/landing/README.md. Анимация — framer-motion, поэтому файл клиентский.
+
+/**
+ * Значок подвала задаётся ключом, а не компонентом: страница серверная, а
+ * функцию через границу к клиенту не передать. Список ключей — здесь, рядом с
+ * иконками. Брендовых значков в lucide больше нет: площадка коротких видео —
+ * хлопушка, Telegram — самолётик.
+ */
+export type SocialIconName = "reels" | "telegram";
+
+const SOCIAL_ICONS: Record<SocialIconName, LucideIcon> = {
+  reels: Clapperboard,
+  telegram: Send,
+};
 
 interface MinimalistHeroProps {
   logoText: string;
@@ -23,7 +36,7 @@ interface MinimalistHeroProps {
   imageAlt: string;
   /** Заголовок по строке на часть; третья строка необязательна. */
   overlayText: { part1: string; part2: string; part3?: string };
-  socialLinks: { icon: LucideIcon; href: string; label: string }[];
+  socialLinks: { icon: SocialIconName; href: string; label: string }[];
   /** Подпись внизу: что машина говорит о себе цифрами. */
   locationText: string;
   className?: string;
@@ -61,24 +74,27 @@ const CtaButton = ({
 
 const SocialIcon = ({
   href,
-  icon: Icon,
+  icon,
   label,
 }: {
   href: string;
-  icon: LucideIcon;
+  icon: SocialIconName;
   label: string;
-}) => (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label={label}
-    title={label}
-    className="text-foreground/60 transition-colors hover:text-foreground"
-  >
-    <Icon className="h-5 w-5" />
-  </a>
-);
+}) => {
+  const Icon = SOCIAL_ICONS[icon];
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      title={label}
+      className="text-foreground/60 transition-colors hover:text-foreground"
+    >
+      <Icon className="h-5 w-5" />
+    </a>
+  );
+};
 
 export const MinimalistHero = ({
   logoText,
@@ -198,7 +214,7 @@ export const MinimalistHero = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 1.3 }}
-          className="text-right text-sm font-medium text-foreground/80"
+          className="max-w-[70%] text-right text-xs font-medium text-foreground/80 md:max-w-none md:text-sm"
         >
           {locationText}
         </motion.div>

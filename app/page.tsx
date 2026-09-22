@@ -1,4 +1,3 @@
-import { Clapperboard, Send } from "lucide-react";
 import { MinimalistHero } from "@/components/ui/minimalist-hero";
 import { resolveDoc } from "@/lib/docs";
 import { heroMetric, landingBlocks, HERO_METRIC_FALLBACK, type LandingBlock } from "@/lib/landing";
@@ -19,8 +18,12 @@ const NAV = [
 ];
 
 const SOCIAL = [
-  { icon: Clapperboard, href: "https://www.instagram.com/ruvibecoding/", label: "Ролики завода" },
-  { icon: Send, href: "https://t.me/+edS99a5ufdpkODFi", label: "Канал в Telegram" },
+  {
+    icon: "reels" as const,
+    href: "https://www.instagram.com/ruvibecoding/",
+    label: "Ролики завода",
+  },
+  { icon: "telegram" as const, href: "https://t.me/+edS99a5ufdpkODFi", label: "Канал в Telegram" },
 ];
 
 /** Метрика машины внизу героя: цифры из тех же таблиц, что экран сети. */
