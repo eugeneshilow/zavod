@@ -44,7 +44,9 @@ describe("логотип: канон и переносчик", () => {
     expect(MARK.right).toBeLessThan(MARK.size);
     expect(MARK.bottom - MARK.top).toBeGreaterThan(MARK.stroke * 3);
     expect(MARK.right - MARK.left).toBe(MARK.bottom - MARK.top);
-    expect(letterPath()).toMatch(/^M \d+ \d+ H \d+ V \d+ L \d+ \d+ H \d+ V \d+ H \d+ V \d+ L \d+ \d+ H \d+ Z$/);
+    expect(letterPath()).toMatch(
+      /^M \d+ \d+ H \d+ V \d+ L \d+ \d+ H \d+ V \d+ H \d+ V \d+ L \d+ \d+ H \d+ Z$/,
+    );
   });
 
   it("favicon — копия знака из переносчика", () => {

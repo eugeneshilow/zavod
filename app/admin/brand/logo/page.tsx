@@ -1,7 +1,17 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Logo, Mark } from "@/components/brand/logo";
-import { CLEAR_SPACE, INK, LOCKUP, MARK, MIN_SIZE, PAPER, WORD, YELLOW, markSvg } from "@/lib/brand";
+import {
+  CLEAR_SPACE,
+  INK,
+  LOCKUP,
+  MARK,
+  MIN_SIZE,
+  PAPER,
+  WORD,
+  YELLOW,
+  markSvg,
+} from "@/lib/brand";
 import { renderDoc, resolveDoc, stripTitle } from "@/lib/docs";
 import { Box, SectionLabel } from "../../_components/shell";
 
@@ -90,7 +100,9 @@ export default async function BrandLogoPage() {
             </tr>
             <tr>
               <td className="py-1.5 pr-3">Хедер админки</td>
-              <td className="py-1.5 pr-3 text-zinc-500">знак и слово, кегль 14, на чёрной полосе</td>
+              <td className="py-1.5 pr-3 text-zinc-500">
+                знак и слово, кегль 14, на чёрной полосе
+              </td>
               <td className="py-1.5 text-right text-zinc-400">эта страница</td>
             </tr>
             <tr>
