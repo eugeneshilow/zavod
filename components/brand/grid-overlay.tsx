@@ -78,7 +78,8 @@ export function GridOverlay() {
   const [w, setW] = useState(0);
   const [tip, setTip] = useState<Tip | null>(null);
   useEffect(() => {
-    const update = () => setW(window.innerWidth);
+    // ширина без полосы прокрутки: по ней стоит вёрстка, innerWidth включает скроллбар
+    const update = () => setW(document.documentElement.clientWidth);
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
