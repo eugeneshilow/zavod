@@ -15,6 +15,7 @@
 | ----------- | ---------------------- | --------------------- | -------------------------------------------- |
 | **лендинг** | [layout.md](layout.md) | `/admin/brand/layout` | `lib/layout.ts` · накладка `/?grid`          |
 | **лого**    | [logo.md](logo.md)     | `/admin/brand/logo`   | `lib/brand.ts` · `components/brand/logo.tsx` |
+| **полигон** | [lab.md](lab.md)       | `/admin/brand/lab`    | `lib/brand-lab.ts`                           |
 
 Новый режим — новый файл канона здесь, строка в этой таблице и в списке
 режимов `app/admin/brand/_modes/tabs.tsx`.
@@ -25,6 +26,8 @@
   ритм секций, два исключения (шапка и герой).
 - [logo.md](logo.md) — логотип: знак «z» в жёлтом круге и слово «zavod»;
   числа знака, написание, охранное поле, где стоит; favicon `app/icon.svg`.
+- [lab.md](lab.md) — полигон: двенадцать разных пар знак + слово для выбора глазами;
+  переносчик — `lib/brand-lab.ts`, стекло — `/admin/brand/lab`.
 - [journal.md](journal.md) — почему так решили, что отвергли.
 
 ## Чего здесь пока нет
