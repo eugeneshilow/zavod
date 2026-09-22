@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 // vibecoding.ru, который собирает живую страницу сам. Список голых адресов —
 // здесь; остальное получает хедер, шапку-путь и полосу «вверх · вниз».
 
-export const BARE_PATHS = new Set(["/admin/brand", "/admin/brand/lab"]);
+export const BARE_PATHS = new Set(["/admin/brand", "/admin/brand/lab", "/admin/brand/logo"]);
 
 export function Frame({ chrome, children }: { chrome: ReactNode; children: ReactNode }) {
   const pathname = usePathname();

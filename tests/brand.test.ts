@@ -1,58 +1,85 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CLEAR_SPACE, LOCKUP, MARK, MIN_SIZE, WORD, letterPath, markSvg } from "@/lib/brand";
+import { DOWNLOADS, LOGO_FILES, PALETTE, RULES, WORD, horizontalSrc, logoFile } from "@/lib/brand";
 
-// Поверка Spec-Driven: числа канона docs/brand/logo.md и переносчика lib/brand.ts
-// совпадают; favicon — копия знака из переносчика; логотип на поверхностях стоит
-// компонентом, а не словом руками.
+// Поверка Spec-Driven: реестр файлов переносчика лежит на диске и совпадает с
+// таблицей канона docs/brand/logo.md; закладка браузера — копия файла набора;
+// поверхности берут логотип компонентом; кнопки скачивания ссылаются на реестр.
 
 const canon = readFileSync("docs/brand/logo.md", "utf8");
 
-/** Число из строки таблицы канона по подписи ячейки. */
+function canonIds(): string[] {
+  const start = canon.indexOf("## Файлы");
+  const end = canon.indexOf("## Где стоит");
+  return canon
+    .slice(start, end)
+    .split("\n")
+    .filter((l) => /^\| [a-z][a-z0-9-]* +\|/.test(l) && !l.startsWith("| id"))
+    .map((l) => l.split("|")[1].trim());
+}
+
 function canonNumber(label: string): number {
   const row = canon.split("\n").find((l) => l.startsWith(`| ${label}`));
   if (!row) throw new Error(`в каноне нет строки «${label}»`);
-  const cell = row.split("|")[2]?.trim() ?? "";
-  const m = cell.replace(",", ".").match(/-?\d+(\.\d+)?/);
-  if (!m) throw new Error(`в строке «${label}» нет числа: ${cell}`);
+  const m = (row.split("|")[2] ?? "").replace(",", ".").match(/\d+(\.\d+)?/);
+  if (!m) throw new Error(`в строке «${label}» нет числа`);
   return Number(m[0]);
 }
 
-describe("логотип: канон и переносчик", () => {
-  it("числа знака совпадают с таблицей канона", () => {
-    expect(canonNumber("Сторона квадрата")).toBe(MARK.size);
-    expect(canonNumber("Буква: левый край")).toBe(MARK.left);
-    expect(canonNumber("Буква: правый край")).toBe(MARK.right);
-    expect(canonNumber("Буква: верх")).toBe(MARK.top);
-    expect(canonNumber("Буква: низ")).toBe(MARK.bottom);
-    expect(canonNumber("Толщина горизонтальных штрихов")).toBe(MARK.stroke);
-    expect(canonNumber("Сдвиг кромок диагонали")).toBe(MARK.diagonal);
+describe("логотип: набор, канон и переносчик", () => {
+  it("каждый файл реестра лежит в public и id уникальны", () => {
+    const ids = new Set<string>();
+    for (const f of LOGO_FILES) {
+      expect(existsSync(`public${f.path}`), f.path).toBe(true);
+      expect(ids.has(f.id), f.id).toBe(false);
+      ids.add(f.id);
+    }
+    expect(LOGO_FILES.length).toBeGreaterThanOrEqual(12);
   });
 
-  it("написание, охранное поле и минимумы совпадают с каноном", () => {
-    expect(canonNumber("Диаметр знака")).toBe(LOCKUP.markPerEm);
-    expect(canonNumber("Зазор знак — слово")).toBe(LOCKUP.gapPerEm);
-    expect(canonNumber("Разрядка слова")).toBe(LOCKUP.tracking);
-    expect(canonNumber("Шрифт")).toBe(LOCKUP.weight);
-    expect(canonNumber("Охранное поле")).toBe(CLEAR_SPACE);
-    expect(canonNumber("Минимум: знак")).toBe(MIN_SIZE.mark);
-    expect(canonNumber("Минимум: слово")).toBe(MIN_SIZE.word);
+  it("таблица «Файлы» канона повторяет реестр по id и порядку", () => {
+    expect(canonIds()).toEqual(LOGO_FILES.map((f) => f.id));
   });
 
-  it("буква вписана в квадрат, штрихи не наезжают друг на друга", () => {
-    expect(MARK.left).toBeGreaterThan(0);
-    expect(MARK.right).toBeLessThan(MARK.size);
-    expect(MARK.bottom - MARK.top).toBeGreaterThan(MARK.stroke * 3);
-    expect(MARK.right - MARK.left).toBe(MARK.bottom - MARK.top);
-    expect(letterPath()).toMatch(
-      /^M \d+ \d+ H \d+ V \d+ L \d+ \d+ H \d+ V \d+ H \d+ V \d+ L \d+ \d+ H \d+ Z$/,
+  it("палитра канона совпадает с переносчиком", () => {
+    for (const hex of [
+      PALETTE.teal,
+      PALETTE.fold,
+      PALETTE.ink,
+      PALETTE.mint,
+      PALETTE.mintFold,
+      PALETTE.paper,
+    ]) {
+      expect(canon, hex).toContain(`\`${hex}\``);
+    }
+    const pack = JSON.parse(readFileSync("public/brand/logo/brand/palette.json", "utf8"));
+    expect(pack.teal).toBe(PALETTE.teal);
+    expect(pack.ink).toBe(PALETTE.ink);
+  });
+
+  it("правила совпадают с каноном", () => {
+    expect(canonNumber("Минимум полного логотипа")).toBe(RULES.minHorizontal);
+    expect(canonNumber("Минимум отдельного цветного знака")).toBe(RULES.minMark);
+    expect(canonNumber("Свободное поле вокруг знака")).toBe(RULES.clearSpace);
+  });
+
+  it("закладка браузера — копии файлов набора", () => {
+    expect(readFileSync("app/icon.svg", "utf8")).toBe(
+      readFileSync(`public${logoFile("favicon-svg").path}`, "utf8"),
+    );
+    expect(readFileSync("app/favicon.ico")).toEqual(
+      readFileSync(`public${logoFile("favicon-ico").path}`),
+    );
+    expect(readFileSync("app/apple-icon.png")).toEqual(
+      readFileSync(`public${logoFile("touch-icon-png").path}`),
     );
   });
 
-  it("favicon — копия знака из переносчика", () => {
-    expect(readFileSync("app/icon.svg", "utf8")).toBe(markSvg());
-    expect(markSvg()).toContain(`aria-label="${WORD}"`);
-    expect(markSvg("mono")).not.toBe(markSvg("color"));
+  it("кнопки скачивания ссылаются на файлы реестра", () => {
+    for (const d of DOWNLOADS) expect(() => logoFile(d.fileId), d.label).not.toThrow();
+    expect(DOWNLOADS.map((d) => d.label)).toContain("Telegram");
+    expect(horizontalSrc("primary")).toMatch(/\.svg$/);
+    expect(WORD).toBe("zavod.today");
   });
 
   it("на поверхностях логотип стоит компонентом, не словом руками", () => {

@@ -35,7 +35,7 @@ export function SiteNavbar({ className }: { className?: string }) {
       >
         <div className="flex items-center justify-between gap-4 md:grid md:grid-cols-3">
           <a href="#" aria-label="zavod, наверх">
-            <Logo em={18} />
+            <Logo height={54} />
           </a>
 
           <div className="hidden items-center justify-center gap-6 md:flex lg:gap-8">
