@@ -47,3 +47,24 @@
 - Вопросы и ответы: [Centered Accordion FAQ · LN](https://21st.dev/@ln-dev7/components/faqs-01) · [FAQ · Kokonut](https://21st.dev/@kokonutd/components/faq)
 - Финальный призыв: [CTA Section · shadcndesign](https://21st.dev/@shadcndesign/components/cta-section-1) · [Call To Action · Méschac Irung](https://21st.dev/@meschacirung/components/call-to-action)
 - Футер: [Footer with Navigation Grid · shadcnui-blocks](https://21st.dev/@shadcnui-blocks/components/footer-01) · [Modern Minimal Footer · prebuiltui](https://21st.dev/@prebuiltui/components/footer-1/modern-minimal-footer)
+
+## Набор с Tailark, kit Mist (22.09.2026)
+
+Бесплатный реестр `@tailark-oss` того же автора, что «Content Section» и
+«Features 8» выше; полный разбор 96 блоков —
+[research/2026-09-22-tailark](research/2026-09-22-tailark/README.md).
+Набор из одного kit, чтобы страница была одной рукой; ссылки — живое
+превью блока. Синие кнопки Mist → жёлтый завода.
+
+- Проблема: [mist-content-4](https://oss.tailark.com/view/mist-content-4?theme=light) — только верх (заголовок + абзац), три колонки и цифры срезать
+- Как это работает: [mist-features-9](https://oss.tailark.com/view/mist-features-9?theme=light) — три ряда «кадр слева, шаг справа»
+- Примеры: [mist-features-2](https://oss.tailark.com/view/mist-features-2?theme=light) — три карточки с картинкой сверху → вертикальные кадры роликов, под каждым просмотры и досмотр
+- Что внутри ролика: [mist-features-6](https://oss.tailark.com/view/mist-features-6?theme=light) — три карточки с иконкой и мини-иллюстрацией → четыре, внутри кусочек кадра
+- Цена: [mist-pricing-1](https://oss.tailark.com/view/mist-pricing-1?theme=light) — одна карточка тарифа, справа что входит; логотипы снизу убрать
+- Отзывы: [mist-testimonials-2](https://oss.tailark.com/view/mist-testimonials-2?theme=light) — три карточки с аватаром
+- Вопросы и ответы: [mist-faqs-2](https://oss.tailark.com/view/mist-faqs-2?theme=light) — заголовок слева, раскрывашки справа
+- Финальный призыв: [mist-call-to-action-1](https://oss.tailark.com/view/mist-call-to-action-1?theme=light) — одна фраза, одна кнопка вместо двух
+- Футер: [mist-footer-2](https://oss.tailark.com/view/mist-footer-2?theme=light) — три колонки ссылок, внизу соцсети и копирайт → соцсети · документы · контакты, ИП и реквизиты
+
+Замены с 21st.dev, если блок Mist окажется слабее на живых данных:
+«Как это работает» от chamaac и «Примеры» сеткой Bento (список выше).
