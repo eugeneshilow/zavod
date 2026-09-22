@@ -270,6 +270,28 @@ export const markFailed = internalMutation({
   },
 });
 
+/**
+ * Снять строки очереди руками: кнопки «Переписать» и «Снять» экрана идей.
+ * Трогает только те, что ещё не уехали, — approved и draft; posting, posted и
+ * уже упавшие остаются как есть, иначе кнопка переписывала бы историю эфира.
+ */
+export const cancelByIds = internalMutation({
+  args: { ids: v.array(v.string()), error: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    let cancelled = 0;
+    for (const raw of args.ids) {
+      const id = ctx.db.normalizeId("data_cooked_instagram_reels", raw);
+      if (!id) continue;
+      const row = await ctx.db.get(id);
+      if (!row || !["approved", "draft"].includes(row.status)) continue;
+      await ctx.db.patch(id, { status: "failed", error: args.error });
+      cancelled += 1;
+    }
+    return cancelled;
+  },
+});
+
 export const setStatus = internalMutation({
   args: { id: v.id("data_cooked_instagram_reels"), status: statusValidator },
   returns: v.null(),

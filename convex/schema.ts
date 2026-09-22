@@ -116,13 +116,22 @@ export default defineSchema({
     .index("by_kind", ["kind"])
     .index("by_at", ["at"]),
 
-  // Лоток идей для роликов: владелец кладёт мысль с экрана сети, раннер завода
-  // на маке забирает самую старую и делает из неё ролик. Модель зовёт раннер по
-  // подписке, а не Convex по ключу, — поэтому здесь только текст и статус.
+  // Идеи роликов: владелец кладёт мысль с экрана сети, кнопкой отправляет её в
+  // работу, раннер завода на маке делает из неё ролик. Модель зовёт раннер по
+  // подписке, а не Convex по ключу, — поэтому здесь текст, статус и след работы:
+  // фаза, история, цена моделей и строки очереди публикации.
   ops_reel_ideas: defineTable({
     text: v.string(),
     createdAt: v.number(),
-    status: v.union(v.literal("new"), v.literal("taken"), v.literal("done"), v.literal("failed")),
+    // pending — ждёт выбора владельца (по умолчанию), new — отдана раннеру,
+    // taken — в работе, done — ролик в очереди, failed — не вышло.
+    status: v.union(
+      v.literal("pending"),
+      v.literal("new"),
+      v.literal("taken"),
+      v.literal("done"),
+      v.literal("failed"),
+    ),
     account: v.string(),
     takenAt: v.optional(v.number()),
     doneAt: v.optional(v.number()),
@@ -133,6 +142,35 @@ export default defineSchema({
     story: v.optional(v.string()),
     note: v.optional(v.string()),
     permalink: v.optional(v.string()),
+    // Где раннер сейчас: пишет историю, собирает ролик или ставит в очередь.
+    // Время фазы — чтобы экран показывал «пишет историю · 3 мин».
+    phase: v.optional(v.union(v.literal("story"), v.literal("render"), v.literal("publish"))),
+    phaseAt: v.optional(v.number()),
+    storyTitle: v.optional(v.string()),
+    storyWords: v.optional(v.number()),
+    storyBeats: v.optional(v.number()),
+    videoSeconds: v.optional(v.number()),
+    // Чем и почём написана история: модель, токены и цена по прайсу API.
+    writer: v.optional(
+      v.object({
+        model: v.string(),
+        inputTokens: v.number(),
+        outputTokens: v.number(),
+        costUsd: v.number(),
+        ms: v.number(),
+      }),
+    ),
+    // Озвучка: модель, знаки текста и цена по прайсу за тысячу знаков.
+    voice: v.optional(v.object({ model: v.string(), chars: v.number(), costUsd: v.number() })),
+    totalCostUsd: v.optional(v.number()),
+    elapsedMs: v.optional(v.number()),
+    // Строки очереди публикации, рождённые этой идеей: по строке на дверь.
+    // Хранятся текстом — их приносит вывод publish.mjs, а не сама база.
+    queueIds: v.optional(v.array(v.string())),
+    storageId: v.optional(v.id("_storage")),
+    // Почему не вышло. Живёт отдельно от note: note — след раннера, error —
+    // причина, которую владелец читает плашкой.
+    error: v.optional(v.string()),
   })
     .index("by_status_created", ["status", "createdAt"])
     .index("by_created", ["createdAt"]),

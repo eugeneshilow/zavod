@@ -1,23 +1,29 @@
 #!/usr/bin/env node
-// Раннер лотка идей: идея из админки -> ролик в очереди публикации.
-// Раз в десять минут (launchd на маке Pro) берёт из лотка самую старую идею,
-// пишет по ней историю безголовым Claude по рецепту мозга `short-videos`,
-// рендерит ролик, ставит его в очередь публикации и отмечает идею готовой.
-// Первая версия делает кадры только двух видов — карточка и карточка поста:
-// чужие видео и картинки требуют строки в LICENSES.md и ручной выкачки,
-// автоматом их не берём.
+// Раннер идей: идея из админки -> ролик в очереди публикации.
+// Раз в десять минут (launchd на маке Pro) берёт самую старую идею, отправленную
+// владельцем в работу кнопкой, пишет по ней историю безголовым Claude по рецепту
+// мозга `short-videos`, рендерит ролик, ставит его в очередь публикации и
+// отмечает идею готовой. Первая версия делает кадры только двух видов —
+// карточка и карточка поста: чужие видео и картинки требуют строки в
+// LICENSES.md и ручной выкачки, автоматом их не берём.
+//
+// Перед каждой фазой раннер перечитывает строку идеи: владелец нажал
+// «Остановить» — работа прекращается, строка уже помечена «остановлено руками».
+// Фазы (история, сборка, публикация), токены и цена пишутся в ту же строку:
+// экран показывает их плашкой и колонкой «модели и цена».
 //
 // Запуск из корня репо:
 //   node scripts/reels/idea-runner.mjs                             рабочий тик
 //   node scripts/reels/idea-runner.mjs --dry-run "<текст идеи>"    без базы и эфира
 //   node scripts/reels/idea-runner.mjs --dry-run --no-render "<текст идеи>"
 //
-// Лог: ~/Library/Logs/zavod-idea-runner.log (время московское).
-// Канон зоны — docs/reels.md, «Раннер идей»; лоток — docs/social/instagram.md.
+// Лог: раннер пишет в stdout, файл держит launchd
+// (~/Library/Logs/zavod-idea-runner.log, время московское). Ручной запуск без
+// launchd: IDEA_RUNNER_LOG_FILE=<путь> — тогда строки уедут ещё и туда.
+// Канон зоны — docs/reels.md, «Раннер идей»; идеи — docs/social/instagram.md.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
@@ -32,7 +38,9 @@ export const RUNNER = {
   lockFile: "out/ideas/.lock",
   recipe: "docs/brains/short-videos/recipe.md",
   sample: "content/reels/stories/robot-knife.json",
-  logFile: path.join(homedir(), "Library/Logs/zavod-idea-runner.log"),
+  // Файл лога — только для ручного запуска: под launchd stdout уже льётся в
+  // ~/Library/Logs/zavod-idea-runner.log, и вторая запись дублировала строки.
+  logFile: process.env.IDEA_RUNNER_LOG_FILE || "",
   // Идея, застрявшая в работе дольше этого, возвращается как «не вышло».
   staleMs: 2 * 60 * 60 * 1000,
   claudeTimeoutMs: 10 * 60 * 1000,
@@ -46,6 +54,10 @@ export const RUNNER = {
   profile: process.env.IDEA_RUNNER_PROFILE || "jvshilov",
   model: "claude-fable-5-1",
   voice: "eleven:ogi2DyUAKJb7CEdqqvlU",
+  voiceModel: "eleven_v3",
+  // Цена озвучки: прайс API ElevenLabs за тысячу знаков v3 на плане Starter.
+  // Уточняется по счёту — потому и вынесена сюда и в переменную окружения.
+  elevenUsdPer1kChars: Number(process.env.ELEVEN_USD_PER_1K_CHARS || 0.3),
 };
 
 /** Кадры, которые раннер умеет брать сам: рисуем мы, лицензий не нужно. */
@@ -58,10 +70,14 @@ export function mskStamp(at = new Date()) {
   return at.toLocaleString("sv-SE", { timeZone: "Europe/Moscow" });
 }
 
-/** Строка в файл лога и в stdout (его подбирает launchd). */
+/**
+ * Строка лога в stdout: под launchd он сам кладёт её в файл. Ручной запуск без
+ * launchd может попросить файл переменной IDEA_RUNNER_LOG_FILE.
+ */
 export function log(line) {
   const text = `${mskStamp()} ${line}`;
   console.log(text);
+  if (!RUNNER.logFile) return;
   try {
     mkdirSync(path.dirname(RUNNER.logFile), { recursive: true });
     appendFileSync(RUNNER.logFile, `${text}\n`);
@@ -128,7 +144,7 @@ export function convexUrl({ prod = true } = {}) {
   return url;
 }
 
-/** Пропуск админских функций лотка. Значение живёт только в памяти процесса. */
+/** Пропуск админских функций идей. Значение живёт только в памяти процесса. */
 function adminToken({ prod = true } = {}) {
   const token = convexEnvGet("ADMIN_API_TOKEN", { prod });
   if (!token) throw new Error("ADMIN_API_TOKEN пуст в окружении Convex");
@@ -281,6 +297,64 @@ export function claudeCmd(args, { profile = RUNNER.profile } = {}) {
   );
 }
 
+/**
+ * Что заход к модели стоил: токены и цена из конверта `--output-format json`.
+ * Кеш считается входом — это те же прочитанные токены, за них выставлен счёт.
+ * Конверта нет (старый формат, обрезанный вывод) — null, и строка цены пустая.
+ */
+export function usageFromClaudeJson(stdout) {
+  let envelope;
+  try {
+    envelope = JSON.parse(String(stdout ?? "").trim());
+  } catch {
+    return null;
+  }
+  const usage = envelope && typeof envelope === "object" ? envelope.usage : null;
+  if (!usage || typeof usage !== "object") return null;
+  const n = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  return {
+    inputTokens:
+      n(usage.input_tokens) +
+      n(usage.cache_creation_input_tokens) +
+      n(usage.cache_read_input_tokens),
+    outputTokens: n(usage.output_tokens),
+    costUsd: n(envelope.total_cost_usd),
+  };
+}
+
+/** Знаки озвучки: ElevenLabs считает кредиты по тексту, который читает голос. */
+export function voiceChars(raw) {
+  const beats = Array.isArray(raw?.beats) ? raw.beats : [];
+  return beats.reduce((sum, beat) => sum + String(beat?.say ?? beat?.text ?? "").length, 0);
+}
+
+/** Цена озвучки по прайсу за тысячу знаков, до сотых цента. */
+export function voiceCost(chars, perThousand = RUNNER.elevenUsdPer1kChars) {
+  return Math.round(((chars / 1000) * perThousand + Number.EPSILON) * 10000) / 10000;
+}
+
+/** Строки очереди, которые родил вывод publish.mjs: по одной на дверь. */
+export function parseQueueIds(output) {
+  const ids = [];
+  for (const line of String(output ?? "").split("\n")) {
+    const match = line.match(/в очереди · (\{.*\})\s*$/);
+    if (!match) continue;
+    try {
+      const row = JSON.parse(match[1]);
+      if (row && typeof row.id === "string") ids.push(row.id);
+    } catch {
+      // строка не разобралась — id этой двери просто не запомнится
+    }
+  }
+  return ids;
+}
+
+/** Файл ролика в хранилище Convex — из строки «файл на месте (…)». */
+export function parseStorageId(output) {
+  const match = String(output ?? "").match(/файл на месте \(([^)\s]+)\)/);
+  return match ? match[1] : null;
+}
+
 /** Ответ из конверта `--output-format json`: поле result. */
 export function claudeResult(stdout) {
   const text = String(stdout ?? "").trim();
@@ -293,7 +367,7 @@ export function claudeResult(stdout) {
   return text;
 }
 
-/** Один заход к модели: промпт через stdin, ответ строкой. */
+/** Один заход к модели: промпт через stdin, ответ строкой и счёт за заход. */
 function askClaude(prompt) {
   const args =
     `-p --model ${RUNNER.model} ` + `--allowedTools "Read,Glob,Grep,WebFetch" --output-format json`;
@@ -311,25 +385,38 @@ function askClaude(prompt) {
       (r.stderr || "").trim() || (r.stdout || "").trim().slice(-400) || `signal=${r.signal}`;
     throw new Error(`безголовый Claude упал: ${detail.slice(0, 400)}`);
   }
-  return claudeResult(r.stdout);
+  return { text: claudeResult(r.stdout), usage: usageFromClaudeJson(r.stdout) };
 }
 
-/** История по идее: одна попытка, и ещё одна с причиной отказа. */
+/**
+ * История по идее: одна попытка, и ещё одна с причиной отказа. Счёт за обе
+ * попытки складывается: отклонённый ответ тоже стоил денег.
+ */
 export function writeStory(ideaText) {
+  const startedAt = Date.now();
+  const writer = { model: RUNNER.model, inputTokens: 0, outputTokens: 0, costUsd: 0, ms: 0 };
+  const bill = (usage) => {
+    if (!usage) return;
+    writer.inputTokens += usage.inputTokens;
+    writer.outputTokens += usage.outputTokens;
+    writer.costUsd = Math.round((writer.costUsd + usage.costUsd + Number.EPSILON) * 10000) / 10000;
+  };
   let reason = "";
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     log(`пишу историю, попытка ${attempt}...`);
     const answer = askClaude(buildPrompt(ideaText, { retryReason: attempt === 1 ? "" : reason }));
+    bill(answer.usage);
+    writer.ms = Date.now() - startedAt;
     let raw;
     try {
-      raw = extractJson(answer);
+      raw = extractJson(answer.text);
     } catch (error) {
       reason = error.message;
       log(`ответ отклонён: ${reason}`);
       continue;
     }
     const check = validateStory(raw);
-    if (check.ok) return { raw, check };
+    if (check.ok) return { raw, check, writer };
     reason = check.problems.join("; ");
     log(`история отклонена: ${reason}`);
   }
@@ -369,9 +456,23 @@ export function publishFile(file, caption, { account } = {}) {
   if (account && account !== "ruvibecoding") args.push("--account", account);
   const out = runNode(args, { timeoutMs: RUNNER.publishTimeoutMs, what: "публикация" });
   for (const line of out.trim().split("\n")) log(`публикация: ${line}`);
+  return { queueIds: parseQueueIds(out), storageId: parseStorageId(out) };
 }
 
 // --------------------------------------------------------------------- тик
+
+/** Владелец нажал «Остановить»: работать дальше незачем, строка уже помечена. */
+class Stopped extends Error {}
+
+/**
+ * Перед каждой фазой строка перечитывается: статус не «в работе» — значит
+ * идею остановили, переписали или убрали руками, и раннер уходит молча.
+ */
+async function ensureTaken(client, token, id) {
+  const row = await client.query(ideas.get, { token, id });
+  if (!row) throw new Stopped("строки идеи больше нет");
+  if (row.status !== "taken") throw new Stopped(`идея больше не в работе (${row.status})`);
+}
 
 /** Рабочий тик: вернуть зависшие, взять идею, написать, собрать, поставить. */
 async function tick() {
@@ -386,14 +487,17 @@ async function tick() {
 
   const idea = await client.mutation(ideas.takeNext, { token, worker: RUNNER.worker });
   if (!idea) {
-    log("лоток пуст");
+    log("идей в работе нет");
     return;
   }
   log(`взял идею ${idea.id}: ${idea.text.slice(0, 120).replace(/\s+/g, " ")}`);
+  const startedAt = Date.now();
 
   let storyJson = "";
   try {
-    const { raw, check } = writeStory(idea.text);
+    await ensureTaken(client, token, idea.id);
+    await client.mutation(ideas.setPhase, { token, id: idea.id, phase: "story" });
+    const { raw, check, writer } = writeStory(idea.text);
     const id = uniqueStoryId(String(raw.id), idTaken);
     raw.id = id;
     storyJson = `${JSON.stringify(raw, null, 2)}\n`;
@@ -401,23 +505,58 @@ async function tick() {
     const storyPath = path.join(RUNNER.outDir, `${id}.json`);
     writeFileSync(storyPath, storyJson);
     log(`история ${id}: слов ${check.words}, битов ${check.beats}`);
+    log(
+      `письмо: ${writer.inputTokens} в токенов, ${writer.outputTokens} из, $${writer.costUsd.toFixed(4)}`,
+    );
+    await client.mutation(ideas.setWriter, {
+      token,
+      id: idea.id,
+      storyTitle: typeof raw.title === "string" ? raw.title : id,
+      storyWords: check.words,
+      storyBeats: check.beats,
+      writer,
+      story: storyJson,
+    });
 
+    await ensureTaken(client, token, idea.id);
+    await client.mutation(ideas.setPhase, { token, id: idea.id, phase: "render" });
     const videoPath = path.join(RUNNER.outDir, `${id}.mp4`);
     const info = renderStoryFile(storyPath, videoPath);
     const seconds = Math.round(info.duration);
     log(`ролик готов: ${videoPath} · ${seconds} с · ${info.sizeMb} МБ`);
 
-    publishFile(videoPath, check.caption, { account: idea.account });
+    const chars = voiceChars(raw);
+    const voice = { model: RUNNER.voiceModel, chars, costUsd: voiceCost(chars) };
+    log(`озвучка: ${chars} знаков, $${voice.costUsd.toFixed(4)}`);
 
+    await ensureTaken(client, token, idea.id);
+    await client.mutation(ideas.setPhase, { token, id: idea.id, phase: "publish" });
+    const queued = publishFile(videoPath, check.caption, { account: idea.account });
+
+    const totalCostUsd =
+      Math.round((writer.costUsd + voice.costUsd + Number.EPSILON) * 10000) / 10000;
+    const elapsedMs = Date.now() - startedAt;
     await client.mutation(ideas.finish, {
       token,
       id: idea.id,
       storyId: id,
       story: storyJson,
       note: `pro · ${check.words} слов · ${seconds} секунд`,
+      voice,
+      videoSeconds: seconds,
+      totalCostUsd,
+      elapsedMs,
+      queueIds: queued.queueIds,
+      ...(queued.storageId ? { storageId: queued.storageId } : {}),
     });
-    log(`идея ${idea.id} закрыта: ролик в очереди публикации`);
+    log(
+      `идея ${idea.id} закрыта: ролик в очереди публикации · итого $${totalCostUsd.toFixed(2)} · ${Math.round(elapsedMs / 60000)} мин`,
+    );
   } catch (error) {
+    if (error instanceof Stopped) {
+      log(`идея ${idea.id} остановлена руками: ${error.message}`);
+      return;
+    }
     const note = String(error.message || error).slice(0, 400);
     log(`идея ${idea.id} не вышла: ${note}`);
     await client.mutation(ideas.fail, {
@@ -436,8 +575,15 @@ async function dryRun(text, { render }) {
   const mark = (what, from) => log(`${what}: ${((Date.now() - from) / 1000).toFixed(1)} с`);
 
   const t0 = Date.now();
-  const { raw, check } = writeStory(text);
+  const { raw, check, writer } = writeStory(text);
   mark("история", t0);
+  log(
+    `письмо: ${RUNNER.model} · ${writer.inputTokens} в токенов, ${writer.outputTokens} из · $${writer.costUsd.toFixed(4)}`,
+  );
+  const chars = voiceChars(raw);
+  const voiceUsd = voiceCost(chars);
+  log(`озвучка: ${RUNNER.voiceModel} · ${chars} знаков · $${voiceUsd.toFixed(4)}`);
+  log(`итого: $${(writer.costUsd + voiceUsd).toFixed(4)}`);
 
   const id = uniqueStoryId(`dry-${String(raw.id)}`, idTaken);
   raw.id = id;

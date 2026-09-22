@@ -199,7 +199,7 @@ async function main(argv) {
   // Длина ролика — экрану сети для досмотра; картинке длины нет, ffprobe не
   // нашёлся — строка едет без неё, публикацию это не останавливает.
   let durationMs;
-  if (plan.mediaType === "reels") {
+  if (plan.mediaType === "REELS") {
     try {
       durationMs = Math.round(probe(plan.filePath).duration * 1000);
     } catch {
