@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@heroui/styles";
 
 /* Тема одна — светлая: админка и витрина читаются одинаково днём и ночью.
    Шрифт один — Inter (подключён в app/layout.tsx через next/font).
@@ -192,4 +193,19 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* Кабинет покупателя живёт на HeroUI; имена переменных у HeroUI и shadcn
+   совпадают (background, foreground, muted, accent, border, radius), а
+   значения витрины стоят в :root без слоя и перебивают тему HeroUI. Внутри
+   кабинета возвращаем значения HeroUI и ставим бирюзу завода акцентом.
+   Канон — docs/cabinet/README.md, палитра — lib/brand.ts. */
+[data-zone="cabinet"] {
+  --background: oklch(0.9702 0 0);
+  --foreground: oklch(0.2103 0.0059 285.89);
+  --muted: oklch(0.5517 0.0138 285.94);
+  --border: oklch(90% 0.004 286.32);
+  --radius: 0.75rem;
+  --accent: #00796f;
+  --accent-foreground: #ffffff;
 }
