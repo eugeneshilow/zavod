@@ -30,24 +30,24 @@ export function SiteNavbar({ className }: { className?: string }) {
           open ? "rounded-3xl" : "rounded-full",
         )}
       >
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 md:grid md:grid-cols-3">
           <a href="#" className="text-lg font-bold tracking-wider">
             zavod
           </a>
 
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden items-center justify-center gap-6 md:flex lg:gap-8">
             {LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium tracking-widest text-foreground/60 transition-colors hover:text-foreground"
+                className="text-sm font-medium tracking-widest whitespace-nowrap text-foreground/60 transition-colors hover:text-foreground"
               >
                 {link.label}
               </a>
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <a
               href={CTA_HREF}
               className="rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"

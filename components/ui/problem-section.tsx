@@ -12,7 +12,7 @@ export function ProblemSection() {
             <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
               Проблема
             </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-balance md:text-5xl">
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-pretty md:text-5xl">
               Новость живёт день. Ролик по ней делают неделю.
             </h2>
           </div>

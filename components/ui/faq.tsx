@@ -10,7 +10,7 @@ export function Faq() {
   return (
     <section id="faq" className="bg-background py-20 md:py-28">
       <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
-        <div className="mx-auto max-w-2xl text-center">
+        <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
             Вопросы и ответы
           </p>
