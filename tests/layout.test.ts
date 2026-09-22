@@ -46,7 +46,10 @@ describe("сетка витрины: канон и переносчик", () => 
     expect(Number(row("V2").split("|")[3])).toBe(axisX(1440).V2);
     expect(Number(row("H1").split("|")[3])).toBe(AXES.H1);
     const overlay = readFileSync("components/brand/grid-overlay.tsx", "utf8");
-    expect(overlay.match(/border-l-2|border-r-2|border-t-2/g)).toHaveLength(3);
+    // ровно три оси: пара вертикалей одним боксом border-x и одна горизонталь border-t
+    expect(overlay.match(/className="absolute inset-y-0 border-x"/g)).toHaveLength(1);
+    expect(overlay.match(/className="absolute inset-x-0 border-t-2"/g)).toHaveLength(1);
+    expect(overlay.match(/<AxisTag id="(V1|V2|H1)"/g)).toHaveLength(3);
   });
 
   it("исключения совпадают с каноном", () => {
