@@ -1,16 +1,15 @@
-import { BAND, BAND_CLASS, COLUMNS, EXCEPTIONS } from "@/lib/layout";
+import { AXES, BAND_CLASS } from "@/lib/layout";
 
-// Накладка сетки на живую витрину: «/?grid» рисует поверх страницы полосу
-// контента, двенадцать колонок с зазорами и края двух исключений (шапка и
-// герой). Числа — из lib/layout.ts, канон — docs/brand/layout.md. Накладка
-// не ловит клики и не попадает в прод без параметра адреса.
+// Накладка сетки на живую витрину: «/?grid» рисует поверх страницы три оси —
+// V1 и V2 по внутренним краям полосы контента и H1 по низу шапки. Числа — из
+// lib/layout.ts, канон — docs/brand/layout.md. Накладка не ловит клики и не
+// попадает в прод без параметра адреса.
 
-/** Бирка оси на линии: короткий id — общий язык владельца и агента в чате. */
-function Tag({ id, text, tone, top }: { id: string; text: string; tone: string; top: number }) {
+/** Бирка оси: короткий id — общий язык владельца и агента в чате. */
+function Tag({ id, text, className }: { id: string; text: string; className: string }) {
   return (
     <span
-      className={`absolute left-1 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium ${tone}`}
-      style={{ top }}
+      className={`absolute whitespace-nowrap rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-red-600 ${className}`}
     >
       {id} · {text}
     </span>
@@ -18,44 +17,20 @@ function Tag({ id, text, tone, top }: { id: string; text: string; tone: string; 
 }
 
 export function GridOverlay() {
-  const columns = Array.from({ length: COLUMNS.count }, (_, i) => i);
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 z-[60]">
-      {/* полоса героя: пунктир */}
-      <div
-        className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-x border-dashed border-sky-500/60"
-        style={{ width: EXCEPTIONS.heroWidth }}
-      >
-        <Tag id="V2" text={`герой ${EXCEPTIONS.heroWidth}`} tone="text-sky-600" top={120} />
-      </div>
-      {/* полоса шапки: точки */}
-      <div
-        className="absolute inset-y-0 left-1/2 -translate-x-1/2 border-x border-dotted border-fuchsia-500/60"
-        style={{ width: EXCEPTIONS.navbarWidth }}
-      >
-        <Tag
-          id="V3"
-          text={`шапка ${EXCEPTIONS.navbarWidth} · top ${EXCEPTIONS.navbarTop}`}
-          tone="text-fuchsia-600"
-          top={80}
-        />
-      </div>
-      {/* полоса контента и колонки */}
-      <div className={`${BAND_CLASS} relative h-full border-x border-rose-500/70`}>
-        <Tag
-          id="V1"
-          text={`полоса ${BAND.width} · поля ${BAND.edgeDesktop} · ${COLUMNS.count} колонок · зазор ${COLUMNS.gutter}`}
-          tone="text-rose-600"
-          top={160}
-        />
-        <div className="grid h-full grid-cols-12 gap-6">
-          {columns.map((i) => (
-            <div key={i} className="h-full bg-rose-500/10" />
-          ))}
+      {/* V1 и V2: внутренние края полосы контента — та же полоса, что у блоков */}
+      <div className={`${BAND_CLASS} relative h-full`}>
+        <div className="absolute inset-y-0 left-6 border-l-2 border-red-500 md:left-10">
+          <Tag id="V1" text={AXES.V1} className="left-1 top-24" />
+        </div>
+        <div className="absolute inset-y-0 right-6 border-r-2 border-red-500 md:right-10">
+          <Tag id="V2" text={AXES.V2} className="right-1 top-24" />
         </div>
       </div>
-      <div className="absolute right-3 top-3 rounded bg-black/80 px-2 py-1 text-[10px] tracking-wide text-white">
-        сетка витрины · канон docs/brand/layout.md · V1 полоса · V2 герой · V3 шапка
+      {/* H1: низ шапки-пилюли */}
+      <div className="absolute inset-x-0 border-t-2 border-red-500" style={{ top: AXES.H1 }}>
+        <Tag id="H1" text={`низ шапки ${AXES.H1}`} className="left-2 top-1" />
       </div>
     </div>
   );

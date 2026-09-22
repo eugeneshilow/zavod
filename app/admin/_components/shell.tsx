@@ -1,31 +1,31 @@
 import type { ReactNode } from "react";
 import { deployInfo, navTree } from "@/lib/docs";
+import { Frame } from "./frame";
 import { NavChildren, PageTitle } from "./page-title";
 import { TopNav } from "./top-nav";
 
 // Единственная рама админки: хедер из дерева docs, шапка-путь, полоса
 // «вверх · вниз», контент. Светлая, плотная, без теней — как ЦУП vibecoding.ru.
-// Рама одна на все экраны, поэтому живёт в app/admin/layout.tsx.
+// Рама одна на все экраны, поэтому живёт в app/admin/layout.tsx; голые
+// адреса (бренд-атлас) выключают её в Frame.
 
 export async function Shell({ children }: { children: ReactNode }) {
   const tree = await navTree();
   const deploy = deployInfo();
   const badge = `${process.env.ADMIN_PASSWORD ? "пароль" : "без пароля"} · ${deploy.commit}`;
-  return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <div className="mx-auto max-w-[1640px] space-y-3 px-5 py-3">
-        <TopNav tree={tree} />
-        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <PageTitle tree={tree} />
-          <span className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-[10px] tracking-wide text-zinc-500">
-            {badge}
-          </span>
-        </header>
-        <NavChildren tree={tree} />
-        <main className="space-y-4 pb-10">{children}</main>
-      </div>
-    </div>
+  const chrome = (
+    <>
+      <TopNav tree={tree} />
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <PageTitle tree={tree} />
+        <span className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-[10px] tracking-wide text-zinc-500">
+          {badge}
+        </span>
+      </header>
+      <NavChildren tree={tree} />
+    </>
   );
+  return <Frame chrome={chrome}>{children}</Frame>;
 }
 
 /** Оранжевый мини-заголовок секции — как на /admin ЦУПа. */

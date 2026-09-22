@@ -1,12 +1,14 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  AXES,
   BAND,
   BAND_CLASS,
   COLUMNS,
   EXCEPTIONS,
   RHYTHM,
   SECTION_CLASS,
+  axisX,
   columnWidth,
 } from "@/lib/layout";
 
@@ -34,6 +36,17 @@ describe("сетка витрины: канон и переносчик", () => 
     expect(canonNumber("Зазор между колонками")).toBe(COLUMNS.gutter);
     expect(canonNumber("Ритм секций на мобиле")).toBe(RHYTHM.sectionMobile);
     expect(canonNumber("Ритм секций от md")).toBe(RHYTHM.sectionDesktop);
+  });
+
+  it("оси накладки: три, и они совпадают с каноном", () => {
+    expect(canonNumber("Шапка: высота пилюли")).toBe(EXCEPTIONS.navbarHeight);
+    expect(AXES.H1).toBe(EXCEPTIONS.navbarTop + EXCEPTIONS.navbarHeight);
+    const row = (id: string) => canon.split("\n").find((l) => l.startsWith(`| ${id} `)) ?? "";
+    expect(Number(row("V1").split("|")[3])).toBe(axisX(1440).V1);
+    expect(Number(row("V2").split("|")[3])).toBe(axisX(1440).V2);
+    expect(Number(row("H1").split("|")[3])).toBe(AXES.H1);
+    const overlay = readFileSync("components/brand/grid-overlay.tsx", "utf8");
+    expect(overlay.match(/border-l-2|border-r-2|border-t-2/g)).toHaveLength(3);
   });
 
   it("исключения совпадают с каноном", () => {

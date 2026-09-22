@@ -1,7 +1,6 @@
 import { LAB_PALETTE, LAB_VARIANTS } from "@/lib/brand-lab";
 import { renderDoc, resolveDoc, stripTitle } from "@/lib/docs";
 import { Box, SectionLabel } from "../../_components/shell";
-import { AtlasTabs } from "../_modes/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +27,6 @@ export default async function BrandLabPage() {
 
   return (
     <>
-      <AtlasTabs active="lab" />
       <SectionLabel>ПОЛИГОН — выберите направление по паре</SectionLabel>
       <Box title={`${LAB_VARIANTS.length} вариантов · ${families} семейств`} aside="выбор глазами">
         <p className="max-w-3xl text-sm leading-relaxed">

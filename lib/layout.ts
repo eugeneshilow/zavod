@@ -29,9 +29,10 @@ export const RHYTHM = {
 
 /** Исключения: два блока живут своей полосой, и это записано в каноне. */
 export const EXCEPTIONS = {
-  /** шапка-пилюля: полоса уже (max-w-5xl), отступ сверху top-4 */
+  /** шапка-пилюля: полоса уже (max-w-5xl), отступ сверху top-4, высота пилюли */
   navbarWidth: 1024,
   navbarTop: 16,
+  navbarHeight: 56,
   /** герой: во весь экран, полоса шире (max-w-7xl), поля p-8 · md:p-12 */
   heroWidth: 1280,
   heroEdgeMobile: 32,
@@ -46,4 +47,24 @@ export const BAND_CLASS = "mx-auto w-full max-w-6xl px-6 md:px-10";
 export function columnWidth(): number {
   const inner = BAND.width - BAND.edgeDesktop * 2;
   return (inner - COLUMNS.gutter * (COLUMNS.count - 1)) / COLUMNS.count;
+}
+
+/**
+ * Оси накладки: две вертикальные по внутренним краям полосы контента и одна
+ * горизонтальная по низу шапки. Больше линий нет — так решил владелец 22.09.
+ */
+export const AXES = {
+  /** левый внутренний край полосы: (экран − полоса) / 2 + поля */
+  V1: "левый край полосы",
+  /** правый внутренний край полосы */
+  V2: "правый край полосы",
+  /** низ шапки-пилюли, px от верха окна */
+  H1: EXCEPTIONS.navbarTop + EXCEPTIONS.navbarHeight,
+} as const;
+
+/** Положение вертикальных осей на экране заданной ширины, px от левого края. */
+export function axisX(viewport: number): { V1: number; V2: number } {
+  const band = Math.min(BAND.width, viewport);
+  const left = (viewport - band) / 2 + BAND.edgeDesktop;
+  return { V1: left, V2: viewport - left };
 }
