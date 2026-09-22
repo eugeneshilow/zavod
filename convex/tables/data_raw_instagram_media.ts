@@ -138,11 +138,17 @@ export const listAirtimeForAdmin = query({
             .sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0))
             .slice(0, limit);
 
-    // Длина ролика известна очереди (ffprobe при постановке): сшиваем по mediaId.
+    // Что очередь знает про это медиа: длину ролика (ffprobe при постановке) и
+    // сам файл — по нему экран даёт кнопку «посмотреть». Сшивка по mediaId.
     const posted = await ctx.db.query("data_cooked_instagram_reels").collect();
     const durationByMedia = new Map<string, number>();
+    const fileByMedia = new Map<string, string>();
     for (const row of posted) {
-      if (row.mediaId && row.durationMs) durationByMedia.set(row.mediaId, row.durationMs);
+      if (!row.mediaId) continue;
+      if (row.durationMs) durationByMedia.set(row.mediaId, row.durationMs);
+      if (fileByMedia.has(row.mediaId)) continue;
+      const file = row.videoUrl ?? (row.storageId ? await ctx.storage.getUrl(row.storageId) : null);
+      if (file) fileByMedia.set(row.mediaId, file);
     }
 
     const now = Date.now();
@@ -172,6 +178,7 @@ export const listAirtimeForAdmin = query({
         postedAt: item.postedAt ?? null,
         missingSince: item.missingSince ?? null,
         durationMs: durationByMedia.get(item.mediaId) ?? null,
+        videoUrl: fileByMedia.get(item.mediaId) ?? null,
         capturedAt: latest?.capturedAt ?? null,
         metrics: latest?.metrics ?? null,
         views24h: delta(DAY_MS),

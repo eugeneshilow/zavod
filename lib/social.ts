@@ -40,6 +40,12 @@ export type Reel = {
   /** Первый сбор, на котором площадка ролик не вернула; null — ролик в эфире. */
   missingSince: number | null;
   caption: string;
+  /** Сам файл ролика из очереди: по нему в таблице стоит значок «посмотреть». */
+  videoUrl: string | null;
+  /** Во что обошёлся ролик, если его сделала идея; null — сделан руками. */
+  costUsd: number | null;
+  /** Ролик родился из идеи, а не из ручной команды публикации. */
+  fromIdea: boolean;
 };
 
 /** Единственный аккаунт на экране сети: английский пилот на экран не выводится (⚖️ ru-only-screen). */
@@ -63,7 +69,11 @@ export function engagementRate(r: Pick<Reel, "interactions" | "reach">): number 
   return (r.interactions / r.reach) * 100;
 }
 
-export type IdeaStatus = "new" | "taken" | "done" | "failed";
+/** pending — ждёт выбора, new — отдана раннеру, дальше работа, ролик, неудача. */
+export type IdeaStatus = "pending" | "new" | "taken" | "done" | "failed";
+
+/** Где раннер сейчас: пишет историю, собирает ролик, ставит его в очередь. */
+export type IdeaPhase = "story" | "render" | "publish";
 
 export type Idea = {
   id: string;
@@ -73,6 +83,30 @@ export type Idea = {
   takenAt: number | null;
   note: string | null;
   permalink: string | null;
+  phase: IdeaPhase | null;
+  phaseAt: number | null;
+  storyTitle: string | null;
+  storyWords: number | null;
+  videoSeconds: number | null;
+  writer: {
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    ms: number;
+  } | null;
+  voice: { model: string; chars: number; costUsd: number } | null;
+  totalCostUsd: number | null;
+  elapsedMs: number | null;
+  videoUrl: string | null;
+  /** Ролик вышел в эфир: строка уезжает из таблицы идей в «Эфир сети». */
+  posted: boolean;
+  /** Медиа вышедшего ролика — по нему строка эфира узнаёт свою идею. */
+  postedMediaId: string | null;
+  /** Сколько дверей ещё ждут этот ролик и когда они собираются его выпустить. */
+  queueCount: number;
+  queueAt: number | null;
+  error: string | null;
 };
 
 export type NetworkGlance = {
@@ -99,11 +133,14 @@ export type NetworkGlance = {
   /** Лучший ролик в эфире — первая строка reels. */
   top: Reel | null;
   ideas: Idea[];
+  /** Сколько стоили ролики за семь дней — подвал таблицы идей. */
+  ideasCost7d: number;
   waiting: number;
   failed: number;
 };
 
-export type SocialData = { networks: NetworkGlance[]; days: DayCell[] };
+/** `now` отдаётся вместе с данными: экран — компонент, часы он не спрашивает. */
+export type SocialData = { networks: NetworkGlance[]; days: DayCell[]; now: number };
 
 const DAY = 24 * 60 * 60 * 1000;
 const MSK = "Europe/Moscow";
@@ -164,6 +201,7 @@ type AirtimeRow = {
   postedAt?: number | null;
   missingSince?: number | null;
   durationMs?: number | null;
+  videoUrl?: string | null;
   views24h?: number | null;
   views48h?: number | null;
   metrics?: {
@@ -203,7 +241,27 @@ export function toReel(row: AirtimeRow): Reel {
     delta48: row.views48h ?? null,
     missingSince: row.missingSince ?? null,
     caption: row.caption ?? "",
+    videoUrl: row.videoUrl ?? null,
+    costUsd: null,
+    fromIdea: false,
   };
+}
+
+/**
+ * Сшивка эфира с идеями: строка эфира, у которой есть идея с тем же медиа,
+ * получает её цену и пометку «из идеи». Ролик, выложенный руками, остаётся без
+ * цены — «руками». Идея приходит сюда только вышедшая (posted).
+ */
+export function attachIdeas(reels: Reel[], ideas: Idea[]): Reel[] {
+  const byMedia = new Map<string, Idea>();
+  for (const idea of ideas) {
+    if (idea.postedMediaId) byMedia.set(idea.postedMediaId, idea);
+  }
+  return reels.map((reel) => {
+    const idea = byMedia.get(reel.mediaId);
+    if (!idea) return reel;
+    return { ...reel, fromIdea: true, costUsd: idea.totalCostUsd };
+  });
 }
 
 /**
@@ -230,21 +288,134 @@ export function splitAirtime(
   };
 }
 
-/** Статус идеи словом — как он стоит в списке лотка. */
-export function ideaStatusWord(idea: Pick<Idea, "status" | "takenAt" | "note">): string {
-  if (idea.status === "new") return "ждёт раннер";
+/** Время суток по Москве: «14:00». */
+function hhmm(ms: number): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: MSK,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+/** Имя модели, как его читает владелец; незнакомое остаётся как есть. */
+export function modelWord(model: string): string {
+  const known: Record<string, string> = {
+    "claude-fable-5-1": "Fable 5.1",
+    "claude-opus-5": "Opus 5",
+    eleven_v3: "ElevenLabs v3",
+    eleven_v2: "ElevenLabs v2",
+  };
+  return known[model] ?? model;
+}
+
+/** Токены тысячами с одним знаком: 38 900 становится «38,9k». */
+export function tokensWord(n: number): string {
+  return `${(n / 1000).toFixed(1).replace(".", ",")}k`;
+}
+
+/** Деньги как в счёте API: «$0.31». */
+export function moneyWord(usd: number): string {
+  return `$${usd.toFixed(2)}`;
+}
+
+/** Сколько заняло: до минуты — секундами, дальше минутами. */
+function spanWord(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)} с`;
+  return `${Math.round(ms / 60_000)} мин`;
+}
+
+/** Плашка фазы: что с идеей прямо сейчас и каким цветом это показать. */
+export type PhaseChip = { text: string; tone: "grey" | "warn" | "bad" };
+
+const PHASE_WORD: Record<IdeaPhase, string> = {
+  story: "история",
+  render: "сборка",
+  publish: "публикация",
+};
+
+/**
+ * Одна плашка на строку идеи: «ждёт выбора», «пишет историю · 3 мин»,
+ * «в очереди · 14:00 · 2 двери» или красная причина неудачи.
+ */
+export function ideaPhaseChip(
+  idea: Pick<Idea, "status" | "phase" | "phaseAt" | "queueCount" | "queueAt" | "error" | "takenAt">,
+  now: number,
+): PhaseChip {
+  if (idea.status === "pending") return { text: "ждёт выбора", tone: "grey" };
+  if (idea.status === "new") return { text: "в очереди к раннеру", tone: "grey" };
   if (idea.status === "taken") {
-    const at = idea.takenAt
-      ? new Intl.DateTimeFormat("ru-RU", {
-          timeZone: MSK,
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date(idea.takenAt))
-      : null;
-    return at ? `в работе с ${at}` : "в работе";
+    const since = idea.phaseAt ?? idea.takenAt;
+    const ms = since === null ? null : Math.max(0, now - since);
+    if (idea.phase === "story") {
+      return {
+        text: ms === null ? "пишет историю" : `пишет историю · ${Math.round(ms / 60_000)} мин`,
+        tone: "warn",
+      };
+    }
+    if (idea.phase === "render") {
+      return {
+        text: ms === null ? "озвучка и сборка" : `озвучка и сборка · ${Math.round(ms / 1000)} с`,
+        tone: "warn",
+      };
+    }
+    if (idea.phase === "publish") return { text: "публикация", tone: "warn" };
+    return { text: "в работе", tone: "warn" };
   }
-  if (idea.status === "done") return "готово";
-  return `не вышло: ${idea.note ?? "без причины"}`;
+  if (idea.status === "done") {
+    if (idea.queueCount === 0 || idea.queueAt === null) {
+      return { text: "в очереди", tone: "warn" };
+    }
+    const doors = idea.queueCount === 1 ? "1 дверь" : `${idea.queueCount} двери`;
+    return { text: `в очереди · ${hhmm(idea.queueAt)} · ${doors}`, tone: "warn" };
+  }
+  const why = idea.error ?? "без причины";
+  const where = idea.phase ? `${PHASE_WORD[idea.phase]} · ` : "";
+  return { text: `${where}${why}`, tone: "bad" };
+}
+
+/**
+ * Три строки цены ролика: чем писали историю, чем озвучивали и сколько вышло
+ * всего. Чего ещё нет — строки нет; нет ничего — пустой список и прочерк.
+ */
+export function ideaCostLines(
+  idea: Pick<Idea, "writer" | "voice" | "totalCostUsd" | "elapsedMs">,
+): string[] {
+  const lines: string[] = [];
+  if (idea.writer) {
+    const w = idea.writer;
+    lines.push(
+      `${modelWord(w.model)} · ${tokensWord(w.inputTokens)} → ${tokensWord(w.outputTokens)} · ${moneyWord(w.costUsd)}`,
+    );
+  }
+  if (idea.voice) {
+    const t = idea.voice;
+    lines.push(`${modelWord(t.model)} · ${t.chars} зн. · ${moneyWord(t.costUsd)}`);
+  }
+  if (idea.totalCostUsd !== null && idea.totalCostUsd !== undefined) {
+    const span = idea.elapsedMs ? ` · ${spanWord(idea.elapsedMs)}` : "";
+    lines.push(`итого ${moneyWord(idea.totalCostUsd)}${span}`);
+  }
+  return lines;
+}
+
+/** Хост ссылки из текста идеи: «x.com». Ссылки нет — null. */
+export function ideaHost(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s"'<>]+/);
+  if (!match) return null;
+  try {
+    return new URL(match[0]).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/** Подвал таблицы идей: сколько ждут выбора, сколько в работе, сколько не вышло. */
+export function ideaCounts(ideas: Idea[]): { pending: number; working: number; failed: number } {
+  return {
+    pending: ideas.filter((i) => i.status === "pending").length,
+    working: ideas.filter((i) => i.status === "new" || i.status === "taken").length,
+    failed: ideas.filter((i) => i.status === "failed").length,
+  };
 }
 
 export async function loadSocial(now = Date.now()): Promise<SocialData | { reason: string }> {
@@ -252,7 +423,7 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
   if ("reason" in access) return access;
   const { client, token } = access;
   try {
-    const [queue, airtime, toggles, state, snapshot, ideas] = await Promise.all([
+    const [queue, airtime, toggles, state, snapshot, ideas, ideasCost7d] = await Promise.all([
       client.query(api.tables.data_cooked_instagram_reels.listForAdmin, { token, limit: 200 }),
       client.query(api.tables.data_raw_instagram_media.listAirtimeForAdmin, {
         token,
@@ -266,7 +437,8 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
         network: "instagram",
         account: IG_ACCOUNT,
       }),
-      client.query(api.tables.ops_reel_ideas.listForAdmin, { token, limit: 10 }),
+      client.query(api.tables.ops_reel_ideas.listForAdmin, { token, limit: 50 }),
+      client.query(api.tables.ops_reel_ideas.weeklyCost, { token }),
     ]);
     const weekAgo = now - 7 * DAY;
     const networks: NetworkGlance[] = NETWORKS.map(({ id, channel, label }) => {
@@ -281,7 +453,7 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
       const waiting = rows.filter((r) => r.status === "approved" || r.status === "draft").length;
       const failed = rows.filter((r) => r.status === "failed").length;
       const isIg = id === "instagram";
-      const air = splitAirtime(isIg ? airtime.map(toReel) : [], now);
+      const air = splitAirtime(isIg ? attachIdeas(airtime.map(toReel), ideas) : [], now);
       return {
         id,
         label,
@@ -306,12 +478,15 @@ export async function loadSocial(now = Date.now()): Promise<SocialData | { reaso
         reels: air.reels,
         deleted: air.deleted,
         top: air.top,
-        ideas: isIg ? ideas : [],
+        // В таблице идей живут только те, чей ролик ещё не вышел: вышедший
+        // уезжает вниз, в «Эфир сети» (⚖️ ideas-table-before-airtime).
+        ideas: isIg ? ideas.filter((idea) => !idea.posted) : [],
+        ideasCost7d: isIg ? ideasCost7d : 0,
         waiting,
         failed,
       };
     });
-    return { networks, days: dayGrid(now) };
+    return { networks, days: dayGrid(now), now };
   } catch (error) {
     return { reason: error instanceof Error ? error.message : String(error) };
   }

@@ -1,14 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Раннер лотка идей (⚖️ idea-runner-on-mac, 2026-09-21): МАШИНА Pro, тик
-     10 минут. Берёт из лотка ops_reel_ideas самую старую идею, пишет историю
-     безголовым Claude по рецепту мозга short-videos, рендерит ролик и ставит
-     его в очередь публикации. Замок out/ideas/.lock не даёт тикам наложиться.
+<!-- Раннер идей (⚖️ idea-runner-on-mac, 2026-09-21): МАШИНА Pro, тик 10 минут.
+     Берёт из ops_reel_ideas самую старую идею, отправленную владельцем в работу
+     кнопкой (статус new), пишет историю безголовым Claude по рецепту мозга
+     short-videos, рендерит ролик и ставит его в очередь публикации. Замок
+     out/ideas/.lock не даёт тикам наложиться.
+
+     Лог пишет launchd: раннер льёт строки в stdout, а StandardOutPath ниже
+     кладёт их в файл. Своей записи в файл у раннера нет — она дублировала
+     каждую строку. Ручной запуск без launchd просит файл переменной
+     IDEA_RUNNER_LOG_FILE.
 
      Env: IDEA_RUNNER_PROFILE — профиль подписки Claude, из которого пишется
      история (на Pro живёт headless-токен ~/.claude-jvshilov-token);
-     NODE_OPTIONS=--dns-result-order=ipv4first — IPv6 до Convex с Pro уходит
-     в VPN-туннель и даёт «fetch failed»/ETIMEDOUT.
+     ELEVEN_USD_PER_1K_CHARS — цена озвучки за тысячу знаков, если прайс плана
+     отличается от 0.30; NODE_OPTIONS=--dns-result-order=ipv4first — IPv6 до
+     Convex с Pro уходит в VPN-туннель и даёт «fetch failed»/ETIMEDOUT.
 
      Установка (Pro): cp scripts/launchd/ru.vibecoding.zavod-idea-runner.plist ~/Library/LaunchAgents/
                       launchctl load ~/Library/LaunchAgents/ru.vibecoding.zavod-idea-runner.plist

@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   buildPrompt,
   extractJson,
+  parseQueueIds,
+  parseStorageId,
   uniqueStoryId,
+  usageFromClaudeJson,
   validateStory,
+  voiceChars,
+  voiceCost,
 } from "@/scripts/reels/idea-runner.mjs";
 import { STALE_MS, isStale } from "@/convex/tables/ops_reel_ideas";
 
-// Правила раннера лотка: что он просит у мозга, как вынимает JSON из ответа и
-// что пускает в рендер. Канон зоны — docs/reels.md, «Раннер идей».
+// Правила раннера идей: что он просит у мозга, как вынимает JSON из ответа,
+// что пускает в рендер и во что считает заход — токены модели, знаки озвучки и
+// строки очереди из вывода публикации. Канон зоны — docs/reels.md.
 
 const TEXTS = [
   "Роботу-руке дали нож и попросили ударить куклу размером с младенца.",
@@ -142,12 +148,78 @@ describe("зависшая идея", () => {
     expect(isStale(base, base.takenAt + STALE_MS - 1, STALE_MS)).toBe(false);
   });
 
-  it("считает от появления в лотке, если время взятия не записано", () => {
+  it("считает от появления идеи, если время взятия не записано", () => {
     const row = { status: "taken", createdAt: 1_000_000 };
     expect(isStale(row, row.createdAt + STALE_MS, STALE_MS)).toBe(true);
   });
 
   it("идею не в работе не трогает", () => {
     expect(isStale({ ...base, status: "new" }, base.takenAt + STALE_MS * 10, STALE_MS)).toBe(false);
+  });
+});
+
+describe("счёт за заход к модели", () => {
+  it("кеш считается входом, цена берётся из конверта", () => {
+    const envelope = JSON.stringify({
+      type: "result",
+      result: "{}",
+      total_cost_usd: 0.1934,
+      usage: {
+        input_tokens: 12,
+        cache_creation_input_tokens: 888,
+        cache_read_input_tokens: 38_000,
+        output_tokens: 2_100,
+      },
+    });
+    expect(usageFromClaudeJson(envelope)).toEqual({
+      inputTokens: 38_900,
+      outputTokens: 2_100,
+      costUsd: 0.1934,
+    });
+  });
+
+  it("без конверта и без usage — счёта нет, а не ноль из воздуха", () => {
+    expect(usageFromClaudeJson("просто текст")).toBeNull();
+    expect(usageFromClaudeJson('{"result":"{}"}')).toBeNull();
+  });
+});
+
+describe("счёт за озвучку", () => {
+  it("знаки считаются по тексту для голоса, а не по тексту на экране", () => {
+    const raw = {
+      beats: [{ text: "На экране", say: "Голос говорит так" }, { text: "Только текст" }],
+    };
+    expect(voiceChars(raw)).toBe("Голос говорит так".length + "Только текст".length);
+    expect(voiceChars({})).toBe(0);
+  });
+
+  it("цена — знаки на прайс за тысячу", () => {
+    expect(voiceCost(1000, 0.3)).toBe(0.3);
+    expect(voiceCost(690, 0.3)).toBeCloseTo(0.207, 4);
+    expect(voiceCost(0, 0.3)).toBe(0);
+  });
+});
+
+describe("вывод публикации", () => {
+  const output = [
+    "заливаю robot-knife.mp4 в хранилище Convex...",
+    "файл на месте (kg2abc123); ставлю в очередь: instagram, telegram · аккаунт ruvibecoding...",
+    'instagram: в очереди · {"id":"j57queue1","channel":"instagram","scheduledAt":1758000000000}',
+    'telegram: в очереди · {"id":"j57queue2","channel":"telegram","scheduledAt":1758000000000}',
+    "Ролик в очереди. Опубликует крон, когда дверь включена и настанет плановое время.",
+  ].join("\n");
+
+  it("вынимает строки очереди по одной на дверь", () => {
+    expect(parseQueueIds(output)).toEqual(["j57queue1", "j57queue2"]);
+  });
+
+  it("вынимает файл в хранилище", () => {
+    expect(parseStorageId(output)).toBe("kg2abc123");
+  });
+
+  it("дверь, которая не встала в очередь, id не даёт", () => {
+    const broken = 'instagram: не встало в очередь — дубль\ntelegram: в очереди · {"id":"j57only"}';
+    expect(parseQueueIds(broken)).toEqual(["j57only"]);
+    expect(parseStorageId(broken)).toBeNull();
   });
 });

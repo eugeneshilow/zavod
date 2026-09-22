@@ -4,8 +4,12 @@ import { moscow, num, type Channel } from "@/lib/reels";
 import {
   dayKey,
   engagementRate,
-  ideaStatusWord,
+  ideaCostLines,
+  ideaCounts,
+  ideaHost,
+  ideaPhaseChip,
   loadSocial,
+  moneyWord,
   NETWORKS,
   replays,
   watchThrough,
@@ -14,12 +18,23 @@ import {
   type Reel,
 } from "@/lib/social";
 import { Box, SectionLabel } from "../../_components/shell";
-import { addIdea, collectMetricsNow, runQueueNow } from "../actions";
+import {
+  addIdea,
+  collectMetricsNow,
+  removeIdea,
+  rewriteIdea,
+  runQueueNow,
+  startIdea,
+  stopIdea,
+  withdrawIdea,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
 
-// /admin/social/<сеть> — одна сеть: четыре числа, кнопки руками, лучшие
-// ролики, канон сети. Канон — docs/social/README.md и docs/social/<сеть>.md.
+// /admin/social/<сеть> — одна сеть: четыре числа, кнопки руками, таблица идей
+// до эфира, таблица эфира после него, канон сети. Идея живёт в верхней таблице,
+// пока её ролик не вышел; вышел — строка уезжает вниз, в «Эфир сети».
+// Канон — docs/social/README.md и docs/social/<сеть>.md.
 
 const button =
   "rounded border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-700 hover:border-zinc-400";
@@ -70,6 +85,18 @@ function ReelRow({ r, muted }: { r: Reel; muted?: boolean }) {
             {r.caption.slice(0, 60)}
           </span>
         ) : null}
+        {r.fromIdea ? <span className="ml-2 text-[10px] text-zinc-400">из идеи</span> : null}
+        {r.videoUrl ? (
+          <a
+            href={r.videoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-2 text-[#C2410C] hover:underline"
+            title="посмотреть ролик"
+          >
+            ▶
+          </a>
+        ) : null}
         {r.missingSince ? (
           <span className="ml-2 text-zinc-400">удалён {dayKey(r.missingSince)}</span>
         ) : null}
@@ -88,33 +115,165 @@ function ReelRow({ r, muted }: { r: Reel; muted?: boolean }) {
       <td className={cell}>{num(r.reposts)}</td>
       <td className={cell}>{pct(engagementRate(r))}</td>
       <td className={cell}>{r.delta48 == null ? "—" : `+${r.delta48}`}</td>
+      <td className={`${cell} font-mono text-[11px]`}>
+        {r.costUsd == null ? (r.fromIdea ? "—" : "руками") : moneyWord(r.costUsd)}
+      </td>
     </tr>
   );
 }
 
-function IdeaList({ ideas }: { ideas: Idea[] }) {
-  if (ideas.length === 0) return <p className="mt-3 text-xs text-zinc-500">лоток пуст</p>;
+const CHIP: Record<"grey" | "warn" | "bad", string> = {
+  grey: "border-zinc-300 text-zinc-500",
+  warn: "border-[#EF9F27] bg-[#FAEEDA] text-[#633806]",
+  bad: "border-[#F09595] bg-[#FCEBEB] text-[#791F1F]",
+};
+
+/** Кнопка строки идеи: форма с её id, чтобы работало без JavaScript. */
+function IdeaButton({
+  action,
+  id,
+  network,
+  label,
+  quiet,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  id: string;
+  network: string;
+  label: string;
+  quiet?: boolean;
+}) {
   return (
-    <ul className="mt-3 space-y-1 text-xs">
-      {ideas.map((idea) => (
-        <li key={idea.id} className="flex gap-2 border-t border-zinc-100 pt-1">
-          <span className="tabular-nums text-zinc-500">{moscow(idea.createdAt)}</span>
-          <span className="text-zinc-800">{idea.text.slice(0, 90)}</span>
-          <span className="ml-auto whitespace-nowrap text-zinc-500">
-            {ideaStatusWord(idea)}
-            {idea.status === "done" && idea.permalink ? (
-              <a
-                href={idea.permalink}
-                rel="noreferrer"
-                className="ml-2 text-[#C2410C] hover:underline"
-              >
-                пост
-              </a>
+    <form action={action} className="inline">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="network" value={network} />
+      <button type="submit" className={`${button} ${quiet ? "text-zinc-400" : ""}`}>
+        {label}
+      </button>
+    </form>
+  );
+}
+
+/** Кнопки «руками» по статусу идеи: у каждой фазы свои. */
+function IdeaHands({ idea, network }: { idea: Idea; network: string }) {
+  const pass = { id: idea.id, network };
+  if (idea.status === "pending") {
+    return (
+      <>
+        <IdeaButton action={startIdea} label="В работу" {...pass} />{" "}
+        <IdeaButton action={removeIdea} label="Убрать" quiet {...pass} />
+      </>
+    );
+  }
+  if (idea.status === "new")
+    return <IdeaButton action={removeIdea} label="Убрать" quiet {...pass} />;
+  if (idea.status === "taken")
+    return <IdeaButton action={stopIdea} label="Остановить" quiet {...pass} />;
+  if (idea.status === "done") {
+    return (
+      <>
+        <IdeaButton action={rewriteIdea} label="Переписать" {...pass} />{" "}
+        <IdeaButton action={withdrawIdea} label="Снять" quiet {...pass} />
+      </>
+    );
+  }
+  return (
+    <>
+      <IdeaButton action={startIdea} label="Повторить" {...pass} />{" "}
+      <IdeaButton action={removeIdea} label="Убрать" quiet {...pass} />
+    </>
+  );
+}
+
+/** Одна строка верхней таблицы: идея до эфира. */
+function IdeaRow({ idea, network, now }: { idea: Idea; network: string; now: number }) {
+  const chip = ideaPhaseChip(idea, now);
+  const host = ideaHost(idea.text);
+  const cost = ideaCostLines(idea);
+  return (
+    <tr className="border-t border-zinc-100 align-top">
+      <td className="px-2 py-[3px] text-zinc-800">
+        {idea.text.replace(/\s+/g, " ").slice(0, 70)}
+        {host ? <span className="ml-2 text-[10px] text-zinc-400">· {host}</span> : null}
+      </td>
+      <td className="px-2 py-[3px] tabular-nums text-zinc-500">{moscow(idea.createdAt)}</td>
+      <td className="px-2 py-[3px]">
+        <span
+          className={`inline-block rounded-full border px-2 py-[1px] text-[10px] ${CHIP[chip.tone]}`}
+        >
+          {chip.text}
+        </span>
+      </td>
+      <td className="px-2 py-[3px]">
+        {idea.storyTitle ? (
+          <>
+            {idea.storyTitle}
+            {idea.storyWords ? (
+              <span className="ml-2 text-[10px] text-zinc-400">· {idea.storyWords} слов</span>
             ) : null}
-          </span>
-        </li>
-      ))}
-    </ul>
+          </>
+        ) : (
+          <span className="text-zinc-400">—</span>
+        )}
+      </td>
+      <td className="px-2 py-[3px]">
+        {idea.videoUrl ? (
+          <a
+            href={idea.videoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#C2410C] hover:underline"
+          >
+            {idea.videoSeconds ? `▶ ${idea.videoSeconds} с` : "▶ ролик"}
+          </a>
+        ) : (
+          <span className="text-zinc-400">—</span>
+        )}
+      </td>
+      <td className="px-2 py-[3px] font-mono text-[11px] text-zinc-600">
+        {cost.length === 0 ? (
+          <span className="font-sans text-zinc-400">—</span>
+        ) : (
+          cost.map((line) => <div key={line}>{line}</div>)
+        )}
+      </td>
+      <td className="whitespace-nowrap px-2 py-[3px] text-right">
+        <IdeaHands idea={idea} network={network} />
+      </td>
+    </tr>
+  );
+}
+
+/** Верхняя таблица: идеи до эфира, от свежей вниз. */
+function IdeasTable({ n, now }: { n: NetworkGlance; now: number }) {
+  const counts = ideaCounts(n.ideas);
+  if (n.ideas.length === 0) return <p className="mt-3 text-xs text-zinc-500">идей нет</p>;
+  return (
+    <>
+      <table data-testid="ideas-table" className="mt-3 w-full text-xs">
+        <thead className="bg-zinc-50">
+          <tr>
+            <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">идея</th>
+            <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">добавлена</th>
+            <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">фаза</th>
+            <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">история</th>
+            <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">ролик</th>
+            <th className="px-2 py-1 text-left text-[10px] font-medium text-zinc-500">
+              модели и цена
+            </th>
+            <th className={TH}>руками</th>
+          </tr>
+        </thead>
+        <tbody>
+          {n.ideas.map((idea) => (
+            <IdeaRow key={idea.id} idea={idea} network={n.id} now={now} />
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 border-t border-zinc-100 pt-2 text-[10px] text-zinc-500">
+        ждут выбора {counts.pending} · в работе {counts.working} · не вышло {counts.failed} ·
+        потрачено за неделю {moneyWord(n.ideasCost7d)}
+      </p>
+    </>
   );
 }
 
@@ -172,6 +331,9 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
   const [social, canon] = await Promise.all([loadSocial(), resolveDoc(["social", network])]);
   const n =
     meta && !("reason" in social) ? social.networks.find((x) => x.id === meta.id) : undefined;
+  // Часы приходят вместе с данными: компонент их не спрашивает, иначе один и
+  // тот же экран считал бы «пишет историю · N мин» от разного «сейчас».
+  const now = "reason" in social ? 0 : social.now;
 
   return (
     <>
@@ -226,36 +388,28 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
           </Box>
           {n.id === "instagram" ? (
             <>
-              <SectionLabel id="ideas">ИДЕЯ — из лотка в ролик</SectionLabel>
-              <Box title="Лоток идей" aside="ops_reel_ideas">
-                <div className="flex flex-wrap items-start gap-3">
-                  <form action={addIdea} className="flex flex-1 flex-col gap-2" data-testid="ideas">
-                    <input type="hidden" name="network" value={n.id} />
-                    <textarea
-                      name="text"
-                      rows={3}
-                      placeholder="Одна новость или мысль: ссылка на источник и два предложения, что в ней интересного"
-                      className="w-full rounded border border-zinc-200 px-2 py-1 text-xs"
-                    />
-                    <button type="submit" className={`${button} self-start`}>
-                      Положить в лоток
-                    </button>
-                    {search?.idea === "empty" ? (
-                      <p className="text-[11px] text-[#C2410C]">
-                        Идея пустая: нечего класть в лоток.
-                      </p>
-                    ) : null}
-                  </form>
-                  <p className="max-w-[280px] text-[11px] text-zinc-500">
-                    идею забирает раннер завода на маке: история по рецепту мозга short-videos,
-                    рендер, очередь публикации
-                  </p>
-                </div>
-                <IdeaList ideas={n.ideas} />
+              <SectionLabel id="ideas">ИДЕИ — до эфира: накидываем, кнопкой выбираем</SectionLabel>
+              <Box title="Идеи" aside="ops_reel_ideas">
+                <form action={addIdea} className="flex items-start gap-2" data-testid="ideas">
+                  <input type="hidden" name="network" value={n.id} />
+                  <textarea
+                    name="text"
+                    rows={2}
+                    placeholder="Ссылка на пост или новость и фраза, чем это интересно"
+                    className="flex-1 rounded border border-zinc-200 px-2 py-1 text-xs"
+                  />
+                  <button type="submit" className={button}>
+                    Добавить
+                  </button>
+                </form>
+                {search?.idea === "empty" ? (
+                  <p className="mt-1 text-[11px] text-[#C2410C]">Идея пустая: добавлять нечего.</p>
+                ) : null}
+                <IdeasTable n={n} now={now} />
               </Box>
             </>
           ) : null}
-          <SectionLabel id="best">ЛУЧШИЕ РОЛИКИ — по просмотрам</SectionLabel>
+          <SectionLabel id="best">ЭФИР СЕТИ — после эфира: по просмотрам, с ценой</SectionLabel>
           <Box title="Эфир сети" aside="data_raw_instagram_media · data_raw_instagram_metrics">
             {n.reels.length === 0 && n.deleted.length === 0 ? (
               <p className="text-xs text-zinc-500">
@@ -289,6 +443,7 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
                       <th className={TH}>репосты</th>
                       <th className={TH}>вовлеч.</th>
                       <th className={TH}>48 ч</th>
+                      <th className={TH}>цена</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -297,7 +452,7 @@ export default async function NetworkPage(props: PageProps<"/admin/social/[netwo
                     ))}
                     {n.deleted.length > 0 ? (
                       <tr className="border-t border-zinc-200 bg-zinc-50">
-                        <td colSpan={15} className="px-2 py-1 text-[10px] text-zinc-500">
+                        <td colSpan={16} className="px-2 py-1 text-[10px] text-zinc-500">
                           Удалены с площадки — цифры последние известные
                         </td>
                       </tr>

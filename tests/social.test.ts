@@ -2,15 +2,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { findMissing } from "@/convex/lib/instagram_media";
 import {
+  attachIdeas,
   dayGrid,
   dayKey,
-  ideaStatusWord,
+  ideaCostLines,
+  ideaCounts,
+  ideaHost,
+  ideaPhaseChip,
   postsByDay,
   engagementRate,
   replays,
   splitAirtime,
   toReel,
   watchThrough,
+  type Idea,
   type Reel,
 } from "@/lib/social";
 import SocialPage from "@/app/admin/social/page";
@@ -129,16 +134,160 @@ describe("эфир сети: живые и удалённые", () => {
   });
 });
 
-describe("статус идеи словом", () => {
-  it("по статусу строки лотка", () => {
-    expect(ideaStatusWord({ status: "new", takenAt: null, note: null })).toBe("ждёт раннер");
-    expect(ideaStatusWord({ status: "taken", takenAt: now, note: "mac" })).toMatch(
-      /^в работе с \d{2}:\d{2}$/,
+/** Строка идеи с пустыми полями: тест дополняет только то, что проверяет. */
+function idea(over: Partial<Idea> = {}): Idea {
+  return {
+    id: "i1",
+    text: "Тред про агентов в проде",
+    createdAt: now,
+    status: "pending",
+    takenAt: null,
+    note: null,
+    permalink: null,
+    phase: null,
+    phaseAt: null,
+    storyTitle: null,
+    storyWords: null,
+    videoSeconds: null,
+    writer: null,
+    voice: null,
+    totalCostUsd: null,
+    elapsedMs: null,
+    videoUrl: null,
+    posted: false,
+    postedMediaId: null,
+    queueCount: 0,
+    queueAt: null,
+    error: null,
+    ...over,
+  };
+}
+
+describe("плашка фазы идеи", () => {
+  it("ждёт выбора и очередь к раннеру — серые", () => {
+    expect(ideaPhaseChip(idea({ status: "pending" }), now)).toEqual({
+      text: "ждёт выбора",
+      tone: "grey",
+    });
+    expect(ideaPhaseChip(idea({ status: "new" }), now)).toEqual({
+      text: "в очереди к раннеру",
+      tone: "grey",
+    });
+  });
+
+  it("в работе — жёлтая, со временем своей фазы", () => {
+    const writing = ideaPhaseChip(
+      idea({ status: "taken", phase: "story", phaseAt: now - 3 * 60_000 }),
+      now,
     );
-    expect(ideaStatusWord({ status: "done", takenAt: now, note: null })).toBe("готово");
-    expect(ideaStatusWord({ status: "failed", takenAt: now, note: "рендер упал" })).toBe(
-      "не вышло: рендер упал",
+    expect(writing).toEqual({ text: "пишет историю · 3 мин", tone: "warn" });
+    const rendering = ideaPhaseChip(
+      idea({ status: "taken", phase: "render", phaseAt: now - 40_000 }),
+      now,
     );
+    expect(rendering).toEqual({ text: "озвучка и сборка · 40 с", tone: "warn" });
+    expect(ideaPhaseChip(idea({ status: "taken", phase: "publish", phaseAt: now }), now)).toEqual({
+      text: "публикация",
+      tone: "warn",
+    });
+    expect(ideaPhaseChip(idea({ status: "taken", takenAt: now }), now).text).toBe("в работе");
+  });
+
+  it("готовая показывает время выхода и сколько дверей ждут", () => {
+    const chip = ideaPhaseChip(idea({ status: "done", queueCount: 2, queueAt: now }), now);
+    expect(chip.tone).toBe("warn");
+    expect(chip.text).toMatch(/^в очереди · \d{2}:\d{2} · 2 двери$/);
+    expect(ideaPhaseChip(idea({ status: "done" }), now).text).toBe("в очереди");
+  });
+
+  it("не вышла — красная, с фазой и причиной", () => {
+    expect(
+      ideaPhaseChip(
+        idea({ status: "failed", phase: "story", error: "страница не открылась" }),
+        now,
+      ),
+    ).toEqual({ text: "история · страница не открылась", tone: "bad" });
+    expect(ideaPhaseChip(idea({ status: "failed", error: "остановлено руками" }), now).text).toBe(
+      "остановлено руками",
+    );
+  });
+});
+
+describe("строки цены идеи", () => {
+  it("модель, токены тысячами и деньги по прайсу", () => {
+    expect(
+      ideaCostLines(
+        idea({
+          writer: {
+            model: "claude-fable-5-1",
+            inputTokens: 38_900,
+            outputTokens: 2_100,
+            costUsd: 0.19,
+            ms: 1000,
+          },
+          voice: { model: "eleven_v3", chars: 690, costUsd: 0.12 },
+          totalCostUsd: 0.31,
+          elapsedMs: 6 * 60_000,
+        }),
+      ),
+    ).toEqual([
+      "Fable 5.1 · 38,9k → 2,1k · $0.19",
+      "ElevenLabs v3 · 690 зн. · $0.12",
+      "итого $0.31 · 6 мин",
+    ]);
+  });
+
+  it("чего ещё нет — того и нет в столбце", () => {
+    expect(ideaCostLines(idea())).toEqual([]);
+    expect(
+      ideaCostLines(
+        idea({
+          writer: {
+            model: "claude-fable-5-1",
+            inputTokens: 12_400,
+            outputTokens: 300,
+            costUsd: 0.06,
+            ms: 1000,
+          },
+        }),
+      ),
+    ).toEqual(["Fable 5.1 · 12,4k → 0,3k · $0.06"]);
+  });
+});
+
+describe("идея до эфира", () => {
+  it("вышедшая в эфир из верхней таблицы уходит", () => {
+    const rows = [idea({ id: "a" }), idea({ id: "b", status: "done", posted: true })];
+    expect(rows.filter((row) => !row.posted).map((row) => row.id)).toEqual(["a"]);
+  });
+
+  it("счётчики подвала считают по статусам", () => {
+    const rows = [
+      idea({ id: "a" }),
+      idea({ id: "b" }),
+      idea({ id: "c", status: "new" }),
+      idea({ id: "d", status: "taken" }),
+      idea({ id: "e", status: "failed" }),
+    ];
+    expect(ideaCounts(rows)).toEqual({ pending: 2, working: 2, failed: 1 });
+  });
+
+  it("хост ссылки из текста, а без ссылки — прочерк", () => {
+    expect(ideaHost("Тред про агентов https://x.com/rakshaa_t/status/1 — интересно")).toBe("x.com");
+    expect(ideaHost("https://www.vibecoding.ru/news/2026")).toBe("vibecoding.ru");
+    expect(ideaHost("просто мысль без ссылки")).toBeNull();
+  });
+
+  it("строка эфира берёт цену у своей идеи, ручная остаётся без цены", () => {
+    const reels = [
+      toReel({ mediaId: "m1", metrics: null }),
+      toReel({ mediaId: "m2", metrics: null }),
+    ];
+    const stitched = attachIdeas(reels, [
+      idea({ id: "a", status: "done", posted: true, postedMediaId: "m1", totalCostUsd: 0.31 }),
+    ]);
+    expect(stitched[0]).toMatchObject({ fromIdea: true, costUsd: 0.31 });
+    expect(stitched[1]).toMatchObject({ fromIdea: false, costUsd: null });
   });
 });
 
