@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { captionLine } from "@/lib/landing";
 import { watchThrough, type Reel } from "@/lib/social";
 
@@ -52,8 +53,8 @@ function Tile({ reel }: { reel: Reel }) {
 
 export function ExamplesGallery({ reels }: { reels: Reel[] }) {
   return (
-    <section id="examples" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="examples" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">Примеры</p>
         <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-balance md:text-5xl">
           Ролики, которые завод уже выпустил

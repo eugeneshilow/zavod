@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 // Блок 8 витрины: отзывы. Форма снята с блока testimonials-3 автора Efferd
 // (21st.dev): три карточки цитат со сдвигом второй вниз. Отзывов нет — блока
 // нет: пустой блок на витрину не выводится (канон блоков,
@@ -8,8 +9,8 @@ export type Testimonial = { quote: string; name: string; role: string };
 export function Testimonials({ items }: { items: Testimonial[] }) {
   if (!items.length) return null;
   return (
-    <section id="reviews" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="reviews" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
             Отзывы

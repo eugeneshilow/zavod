@@ -1,3 +1,4 @@
+import { BAND_CLASS } from "@/lib/layout";
 import { Logo } from "@/components/brand/logo";
 import { TELEGRAM_URL } from "@/lib/landing-copy";
 
@@ -15,7 +16,7 @@ const PAGE_LINKS = [
 export function SiteFooter() {
   return (
     <footer id="footer" className="border-t border-foreground/10 bg-background py-12">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+      <div className={BAND_CLASS}>
         <div className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-6">
             <Logo em={18} />

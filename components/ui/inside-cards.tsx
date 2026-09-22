@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { Captions, Hash, Mic, Quote, type LucideIcon } from "lucide-react";
 
 // Блок 6 витрины: что внутри ролика. Форма снята с блока bento-01 автора LN
@@ -30,8 +31,8 @@ const CARDS: { icon: LucideIcon; title: string; body: string }[] = [
 
 export function InsideCards() {
   return (
-    <section id="inside" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="inside" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">
             Что внутри

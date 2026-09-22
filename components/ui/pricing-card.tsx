@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { Check } from "lucide-react";
 
 // Блок 7 витрины: цена. Форма снята с блока pricing-17 автора LN (21st.dev) —
@@ -15,8 +16,8 @@ const INCLUDED = [
 
 export function PricingCard() {
   return (
-    <section id="price" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="price" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs font-medium tracking-[0.2em] text-foreground/50 uppercase">Цена</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-balance md:text-5xl">

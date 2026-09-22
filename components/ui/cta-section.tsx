@@ -1,3 +1,4 @@
+import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { TELEGRAM_URL } from "@/lib/landing-copy";
 
 // Блок 10 витрины: финальный призыв. Форма снята с блока cta-01 автора Felipe
@@ -7,8 +8,8 @@ import { TELEGRAM_URL } from "@/lib/landing-copy";
 
 export function CtaSection() {
   return (
-    <section id="cta" className="bg-background py-20 md:py-28">
-      <div className="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <section id="cta" className={SECTION_CLASS}>
+      <div className={BAND_CLASS}>
         <div className="rounded-3xl border border-foreground/10 px-8 py-16 text-center">
           <h2 className="mx-auto max-w-3xl text-3xl font-bold tracking-tight text-balance md:text-5xl">
             Есть новость? Сделаем ролик, пока она горячая.
