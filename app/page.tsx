@@ -83,8 +83,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 mainText="Вставьте ссылку на новость. Через шесть минут у вас вертикальный ролик с голосом, карточками и субтитрами, готовый к эфиру."
                 readMoreLabel="Как это работает"
                 readMoreLink="#how"
-                imageSrc="/landing/hero-frame.webp"
-                imageAlt="Кадр ролика завода: карточка с цифрой"
+                imageSrc="/landing/hero-portrait.webp"
+                imageAlt="Портрет человека в чёрной водолазке, в профиль, на жёлтом круге"
                 overlayText={{ part1: "новость", part2: "в ролик", part3: "за 6 минут." }}
                 socialLinks={SOCIAL}
                 locationText={showcase.metric}
