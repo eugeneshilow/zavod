@@ -107,6 +107,10 @@ export type Idea = {
   queueCount: number;
   queueAt: number | null;
   error: string | null;
+  /** Когда ролик собран; у старых строк нет. */
+  doneAt?: number | null;
+  /** Заказ из кабинета: голос, двери, пожелание. Идея владельца — без него. */
+  order?: { voice: string; to: string[]; wish?: string; source: string } | null;
 };
 
 export type NetworkGlance = {

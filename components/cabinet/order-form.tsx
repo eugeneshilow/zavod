@@ -1,5 +1,5 @@
-import { Button, Card } from "@heroui/react";
-import { Plus } from "lucide-react";
+import { Card } from "@heroui/react";
+import { SubmitOrder } from "./submit-order";
 import { orderReel } from "@/app/cabinet/new/actions";
 import { DEMO_CUSTOMER, DESTINATIONS, IDEA_HINT, MAX_IDEA, MAX_WISH, VOICES } from "@/lib/cabinet";
 
@@ -67,10 +67,7 @@ export function OrderForm({ error }: { error?: string | null }) {
         />
       </Step>
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" type="submit">
-          <Plus className="size-4" aria-hidden />
-          Сделать ролик
-        </Button>
+        <SubmitOrder />
         <span className="text-xs text-muted">
           ≈ 6 минут · 1 ролик из тарифа «{DEMO_CUSTOMER.plan}»
         </span>

@@ -104,12 +104,15 @@ export function greeting(now: number, name: string): string {
   return `${word}, ${name}`;
 }
 
-export type RowStatus = "live" | "rendering" | "queued" | "failed" | "deleted";
+export type RowStatus =
+  "live" | "rendering" | "queued" | "ready" | "publishing" | "failed" | "deleted";
 
 export const STATUS_LABEL: Record<RowStatus, string> = {
   live: "в эфире",
-  rendering: "рендерится",
-  queued: "в очереди",
+  rendering: "делается",
+  queued: "ждёт робота",
+  ready: "собран",
+  publishing: "ждёт эфира",
   failed: "ошибка",
   deleted: "снят",
 };
@@ -123,6 +126,8 @@ export type CabinetRow = {
   at: number | null;
   permalink: string | null;
   videoUrl: string | null;
+  /** Строка идеи или заказа: ведёт на страницу заказа с шагами. */
+  orderHref: string | null;
 };
 
 export type CabinetData = {
@@ -133,6 +138,10 @@ export type CabinetData = {
   days: { key: string; label: string; count: number }[];
   top: { title: string; views: number }[];
   rows: CabinetRow[];
+  /** Заказы в пути — карточки сверху главной, пока ролик не в эфире. */
+  active: OrderView[];
+  /** Заказ готов за последние сутки — точка на колокольчике. */
+  fresh: boolean;
 };
 
 /** Заголовок ролика: название сюжета, иначе первая строка подписи без ссылок и хэштегов. */
@@ -149,15 +158,204 @@ export function reelTitle(storyTitle: string | null, caption: string): string {
         .trim(),
     )
     .find((l) => l.length > 0);
-  const text = line ?? "Ролик";
+  return clip(line ?? "Ролик");
+}
+
+function clip(text: string): string {
   return text.length > 70 ? `${text.slice(0, 69).trimEnd()}…` : text;
 }
 
-function ideaStatus(idea: Idea): RowStatus {
+/**
+ * Заголовок идеи до сюжета: текст целиком, ссылка сжата до адреса без
+ * протокола — «Сделай рилс про vibecoding.ru/models/opus-5.5», а не обрубок.
+ */
+export function ideaTitle(storyTitle: string | null, text: string): string {
+  const fromStory = (storyTitle ?? "").trim();
+  if (fromStory) return fromStory;
+  const line = text
+    .replace(/https?:\/\/(www\.)?(\S+?)\/?(?=\s|$)/g, "$2")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clip(line || "Идея");
+}
+
+export function ideaStatus(idea: Idea): RowStatus {
   if (idea.status === "failed") return "failed";
-  if (idea.status === "taken" && (idea.phase === "story" || idea.phase === "render"))
-    return "rendering";
+  if (idea.status === "taken") return "rendering";
+  if (idea.status === "done") {
+    if (idea.posted) return "live";
+    return idea.queueCount > 0 ? "publishing" : "ready";
+  }
   return "queued";
+}
+
+export const ORDER_BASE = `${CABINET_PATH}/orders`;
+
+// ---------------------------------------------------------------- заказ по шагам
+
+export type StepState = "done" | "now" | "next" | "failed" | "skip";
+
+export type OrderStep = {
+  key: "accepted" | "robot" | "story" | "render" | "ready" | "air";
+  title: string;
+  state: StepState;
+  /** Когда шаг закончился или начался — время по Москве на экране. */
+  at: number | null;
+  note: string;
+};
+
+export type OrderView = {
+  id: string;
+  href: string;
+  title: string;
+  text: string;
+  voiceName: string | null;
+  doors: string;
+  wish: string | null;
+  createdAt: number;
+  steps: OrderStep[];
+  /** Доля пройденного пути от 0 до 1 — полоса над шагами. */
+  progress: number;
+  /** Путь закончен: ролик в эфире, скачан-готов или ошибка — обновлять незачем. */
+  final: boolean;
+  failed: boolean;
+  videoUrl: string | null;
+  permalink: string | null;
+  current: OrderStep | null;
+};
+
+/** Двери заказа словами покупателя. */
+export function doorsWord(to: string[] | undefined): string {
+  if (!to) return "площадка коротких видео и Telegram";
+  if (to.length === 0) return "только скачать";
+  return DESTINATIONS.filter((d) => d.door && to.includes(d.door))
+    .map((d) => (d.id === "reels" ? "площадка коротких видео" : d.label))
+    .join(" и ");
+}
+
+/** Шесть шагов заказа из строки идеи: чистая функция, экран только рисует. */
+export function orderSteps(idea: Idea, permalink: string | null = null): OrderStep[] {
+  const phase = idea.phase;
+  const taken = idea.status === "taken";
+  const done = idea.status === "done";
+  const failed = idea.status === "failed";
+  const downloadOnly = idea.order ? idea.order.to.length === 0 : false;
+  const failAt: OrderStep["key"] =
+    phase === "render"
+      ? "render"
+      : phase === "publish"
+        ? "ready"
+        : idea.takenAt
+          ? "story"
+          : "robot";
+  const st = (key: OrderStep["key"], passed: boolean, now: boolean): StepState => {
+    if (failed && key === failAt) return "failed";
+    if (passed) return "done";
+    if (now && !failed) return "now";
+    return "next";
+  };
+  const afterStory = done || phase === "render" || phase === "publish";
+  const afterRender = done || phase === "publish";
+  const air: StepState = downloadOnly
+    ? "skip"
+    : idea.posted
+      ? "done"
+      : done && idea.queueCount > 0
+        ? "now"
+        : done
+          ? "failed"
+          : "next";
+  const queueAt = idea.queueAt ? moscowTime(idea.queueAt) : null;
+  return [
+    { key: "accepted", title: "Заказ принят", state: "done", at: idea.createdAt, note: "" },
+    {
+      key: "robot",
+      title: idea.status === "new" ? "Ждёт робота" : "Робот взял заказ",
+      state: st("robot", idea.takenAt !== null || done, idea.status === "new"),
+      at: idea.takenAt,
+      note: idea.status === "new" ? "обычно меньше минуты" : "",
+    },
+    {
+      key: "story",
+      title: "Пишет сюжет",
+      state: st("story", afterStory, taken && (phase === "story" || phase === null)),
+      at: taken && phase === "story" ? idea.phaseAt : taken && phase === null ? idea.takenAt : null,
+      note: "читает идею, пишет историю · ≈ 1 мин",
+    },
+    {
+      key: "render",
+      title: "Озвучка и монтаж",
+      state: st("render", afterRender, taken && phase === "render"),
+      at: taken && phase === "render" ? idea.phaseAt : null,
+      note: "голос, карточки, субтитры · ≈ 4 мин",
+    },
+    {
+      key: "ready",
+      title: "Ролик готов",
+      state: st("ready", done, taken && phase === "publish"),
+      at: idea.doneAt ?? null,
+      note: done ? "смотреть и скачать ниже" : "",
+    },
+    {
+      key: "air",
+      title: "В эфире",
+      state: air,
+      at: null,
+      note:
+        air === "skip"
+          ? "заказан «только скачать»"
+          : idea.posted
+            ? permalink
+              ? "пост вышел"
+              : "вышел"
+            : air === "now"
+              ? queueAt
+                ? `выйдет в ${queueAt}`
+                : "ждёт своей очереди"
+              : air === "failed"
+                ? "в очередь публикации не встал"
+                : "",
+    },
+  ];
+}
+
+function moscowTime(ms: number): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+export function orderView(idea: Idea, permalink: string | null = null): OrderView {
+  const steps = orderSteps(idea, permalink);
+  const counted = steps.filter((s) => s.state !== "skip");
+  const passed = counted.filter((s) => s.state === "done").length;
+  const nowIndex = counted.findIndex((s) => s.state === "now");
+  const progress = Math.min(1, (passed + (nowIndex >= 0 ? 0.5 : 0)) / counted.length);
+  const failed = steps.some((s) => s.state === "failed");
+  const final = failed || counted.every((s) => s.state === "done");
+  const voiceName = idea.order
+    ? (VOICES.find((v) => v.voice === idea.order?.voice)?.name ?? null)
+    : null;
+  return {
+    id: idea.id,
+    href: `${ORDER_BASE}/${idea.id}`,
+    title: ideaTitle(idea.storyTitle, idea.text),
+    text: idea.text,
+    voiceName,
+    doors: doorsWord(idea.order?.to),
+    wish: idea.order?.wish ?? null,
+    createdAt: idea.createdAt,
+    steps,
+    progress,
+    final,
+    failed,
+    videoUrl: idea.videoUrl,
+    permalink,
+    current:
+      steps.find((s) => s.state === "failed") ?? steps.find((s) => s.state === "now") ?? null,
+  };
 }
 
 /** Чистая сборка кабинета из строк эфира и идей; `now` — часы экрана. */
@@ -179,6 +377,7 @@ export function composeCabinet(
       at: reel.postedAt,
       permalink: reel.permalink,
       videoUrl: reel.videoUrl,
+      orderHref: idea ? `${ORDER_BASE}/${idea.id}` : null,
     };
   };
   const pending = input.ideas
@@ -186,13 +385,14 @@ export function composeCabinet(
     .sort((a, b) => b.createdAt - a.createdAt)
     .map<CabinetRow>((idea) => ({
       id: idea.id,
-      title: reelTitle(idea.storyTitle, idea.text),
+      title: ideaTitle(idea.storyTitle, idea.text),
       source: ideaHost(idea.text) ?? "идея",
       status: ideaStatus(idea),
       views: null,
       at: idea.phaseAt ?? idea.takenAt ?? idea.createdAt,
       permalink: null,
       videoUrl: idea.videoUrl,
+      orderHref: `${ORDER_BASE}/${idea.id}`,
     }));
   const live = [...air.reels]
     .sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0))
@@ -211,6 +411,19 @@ export function composeCabinet(
     };
   });
   const today = dayKey(now);
+  const orders = input.ideas.filter((idea) => idea.order);
+  const active = orders
+    .filter(
+      (idea) =>
+        idea.status === "new" ||
+        idea.status === "taken" ||
+        (idea.status === "done" && !idea.posted && idea.queueCount > 0) ||
+        ((idea.status === "done" || idea.status === "failed") &&
+          (idea.doneAt ?? idea.createdAt) >= now - 2 * 60 * 60 * 1000),
+    )
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 3)
+    .map((idea) => orderView(idea));
   return {
     customer: DEMO_CUSTOMER,
     now,
@@ -228,7 +441,34 @@ export function composeCabinet(
         views: r.views ?? 0,
       })),
     rows,
+    active,
+    fresh: orders.some((idea) => idea.status === "done" && (idea.doneAt ?? 0) >= now - DAY),
   };
+}
+
+/** Один заказ со страницы заказа; нет такого — null, нет базы — причина. */
+export async function loadOrder(id: string): Promise<OrderView | null | { reason: string }> {
+  const access = reelsAccess();
+  if ("reason" in access) return access;
+  const { client, token } = access;
+  try {
+    const [ideas, airtime] = await Promise.all([
+      client.query(api.tables.ops_reel_ideas.listForAdmin, { token, limit: 50 }),
+      client.query(api.tables.data_raw_instagram_media.listAirtimeForAdmin, {
+        token,
+        limit: 50,
+        account: DEMO_CUSTOMER.account,
+      }),
+    ]);
+    const idea = ideas.find((row) => row.id === id);
+    if (!idea) return null;
+    const permalink = idea.postedMediaId
+      ? (airtime.find((row) => row.mediaId === idea.postedMediaId)?.permalink ?? null)
+      : null;
+    return orderView(idea, permalink);
+  } catch (error) {
+    return { reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /** Данные кабинета одной функцией; без пропуска к базе — причина строкой. */

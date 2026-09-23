@@ -11,6 +11,9 @@ import {
   greeting,
   isAppHost,
   reelTitle,
+  ideaTitle,
+  orderSteps,
+  orderView,
   VOICES,
   parseOrder,
   DESTINATIONS,
@@ -23,6 +26,10 @@ import CabinetNew from "@/app/cabinet/new/page";
 import { ORDER_VOICES } from "@/convex/tables/ops_reel_ideas";
 
 vi.mock("@/app/cabinet/new/actions", () => ({ orderReel: async () => {} }));
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ refresh: () => {} }),
+}));
 
 // Зона cabinet: хост app. ведёт в кабинет, блоки экрана читаются из канона,
 // числа собираются чисто, экран без базы говорит причину. Канон —
@@ -213,9 +220,7 @@ describe("сборка чисел", () => {
 describe("экран кабинета", () => {
   it("без пропуска к базе называет причину", async () => {
     mocked.data = { reason: "не задан ADMIN_API_TOKEN" };
-    const html = renderToStaticMarkup(
-      await CabinetHome({ searchParams: Promise.resolve({}) } as never),
-    );
+    const html = renderToStaticMarkup(await CabinetHome());
     expect(html).toContain("не задан ADMIN_API_TOKEN");
     mocked.data = null;
   });
@@ -225,13 +230,10 @@ describe("экран кабинета", () => {
       { airtime: [air({ mediaId: "m1", metrics: { views: 700 } })], ideas: [idea({ id: "i1" })] },
       now,
     );
-    const html = renderToStaticMarkup(
-      await CabinetHome({ searchParams: Promise.resolve({ order: "ok" }) } as never),
-    );
-    expect(html).toContain("Заказ принят");
+    const html = renderToStaticMarkup(await CabinetHome());
     expect(html).toContain("Доброе утро, Евгений");
     expect(html).toContain("В эфире");
-    expect(html).toContain("в очереди");
+    expect(html).toContain("ждёт робота");
     expect(html).toContain("Сделать ролик");
     mocked.data = null;
   });
@@ -276,5 +278,108 @@ describe("экран заказа", () => {
     });
     expect(parseOrder({ idea: "  ", voice: "stanislav" })).toHaveProperty("error");
     expect(parseOrder({ idea: "x", voice: "ermil" })).toHaveProperty("error");
+  });
+});
+
+describe("заказ по шагам", () => {
+  const order = { voice: "eleven:ogi2DyUAKJb7CEdqqvlU", to: ["telegram"], source: "cabinet" };
+  const states = (i: Idea) => orderSteps(i).map((s) => s.state);
+
+  it("принят и ждёт робота", () => {
+    expect(states(idea({ id: "o1", order }))).toEqual([
+      "done",
+      "now",
+      "next",
+      "next",
+      "next",
+      "next",
+    ]);
+  });
+
+  it("робот только что взял: сюжет уже идёт", () => {
+    const v = orderView(idea({ id: "o0", status: "taken", takenAt: now, order }));
+    expect(v.steps.map((s) => s.state)).toEqual(["done", "done", "now", "next", "next", "next"]);
+    expect(v.current?.key).toBe("story");
+    expect(orderSteps(idea({ id: "o1", order }))[1].title).toBe("Ждёт робота");
+  });
+
+  it("робот пишет сюжет, потом монтирует", () => {
+    const taken = { status: "taken" as const, takenAt: now - 60_000, order };
+    expect(states(idea({ id: "o2", ...taken, phase: "story", phaseAt: now }))).toEqual([
+      "done",
+      "done",
+      "now",
+      "next",
+      "next",
+      "next",
+    ]);
+    expect(states(idea({ id: "o3", ...taken, phase: "render", phaseAt: now }))).toEqual([
+      "done",
+      "done",
+      "done",
+      "now",
+      "next",
+      "next",
+    ]);
+  });
+
+  it("готов и ждёт эфира; только скачать — эфир пропущен и путь закончен", () => {
+    const done = { status: "done" as const, takenAt: now - 400_000, doneAt: now };
+    const waiting = orderView(
+      idea({ id: "o4", ...done, order, queueCount: 1, queueAt: now + 60_000 }),
+    );
+    expect(waiting.steps.map((s) => s.state)).toEqual([
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "now",
+    ]);
+    expect(waiting.final).toBe(false);
+    const download = orderView(idea({ id: "o5", ...done, order: { ...order, to: [] } }));
+    expect(download.steps.at(-1)?.state).toBe("skip");
+    expect(download.final).toBe(true);
+    expect(download.progress).toBe(1);
+  });
+
+  it("ошибка на монтаже красит свой шаг и заканчивает путь", () => {
+    const v = orderView(
+      idea({
+        id: "o6",
+        status: "failed",
+        takenAt: now - 1,
+        phase: "render",
+        error: "нет голоса",
+        order,
+      }),
+    );
+    expect(v.steps.find((s) => s.key === "render")?.state).toBe("failed");
+    expect(v.failed).toBe(true);
+    expect(v.final).toBe(true);
+  });
+
+  it("заголовок идеи не рубит ссылку, а сжимает её до адреса", () => {
+    expect(ideaTitle(null, "Сделай рилс про https://vibecoding.ru/models/opus-5.5")).toBe(
+      "Сделай рилс про vibecoding.ru/models/opus-5.5",
+    );
+    expect(ideaTitle("Сюжет", "что угодно")).toBe("Сюжет");
+  });
+
+  it("заказы в пути сверху главной, собранный без эфира — «собран», а не «в очереди»", () => {
+    const data = composeCabinet(
+      {
+        airtime: [],
+        ideas: [
+          idea({ id: "a1", order }),
+          idea({ id: "a2", status: "done", doneAt: now - 3 * DAY, queueCount: 0 }),
+        ],
+      },
+      now,
+    );
+    expect(data.active.map((o) => o.id)).toEqual(["a1"]);
+    expect(data.rows.find((r) => r.id === "a2")?.status).toBe("ready");
+    expect(data.rows.find((r) => r.id === "a1")?.orderHref).toBe("/cabinet/orders/a1");
+    expect(data.stats.queued).toBe(1);
   });
 });

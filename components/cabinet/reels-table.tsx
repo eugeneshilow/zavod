@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button, Card, Chip } from "@heroui/react";
 import { Download, ExternalLink } from "lucide-react";
 import { moscow } from "@/lib/reels";
@@ -10,6 +11,8 @@ const CHIP: Record<
   live: { color: "success", variant: "soft" },
   rendering: { color: "warning", variant: "soft" },
   queued: { color: "default", variant: "secondary" },
+  ready: { color: "success", variant: "secondary" },
+  publishing: { color: "warning", variant: "secondary" },
   failed: { color: "danger", variant: "soft" },
   deleted: { color: "default", variant: "secondary" },
 };
@@ -47,7 +50,16 @@ export function ReelsTable({ rows, title = "Все ролики" }: { rows: Cabi
                         aria-hidden
                       />
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{row.title}</p>
+                        {row.orderHref ? (
+                          <Link
+                            href={row.orderHref}
+                            className="block truncate font-medium hover:underline"
+                          >
+                            {row.title}
+                          </Link>
+                        ) : (
+                          <p className="truncate font-medium">{row.title}</p>
+                        )}
                         <p className="text-xs text-muted">
                           {row.source} · {moscow(row.at)}
                         </p>

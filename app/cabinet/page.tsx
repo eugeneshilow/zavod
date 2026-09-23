@@ -1,4 +1,6 @@
 import { Header } from "./_components/shell";
+import { ActiveOrders } from "@/components/cabinet/active-orders";
+import { AutoRefresh } from "@/components/cabinet/auto-refresh";
 import { Tabs } from "./_components/tabs";
 import { StatCard } from "@/components/cabinet/stat-card";
 import { ReleaseBars, TopReels } from "@/components/cabinet/charts";
@@ -9,9 +11,7 @@ export const dynamic = "force-dynamic";
 
 // Первый экран кабинета — шесть блоков канона docs/cabinet/README.md.
 
-export default async function CabinetHome({ searchParams }: PageProps<"/cabinet">) {
-  const params = await searchParams;
-  const ordered = params.order === "ok";
+export default async function CabinetHome() {
   const data = await loadCabinet();
   if ("reason" in data) {
     return (
@@ -23,17 +23,10 @@ export default async function CabinetHome({ searchParams }: PageProps<"/cabinet"
   }
   return (
     <>
-      <Header title={greeting(data.now, data.customer.name)} />
+      <Header title={greeting(data.now, data.customer.name)} ring={data.fresh} />
       <Tabs active={CABINET_PATH} />
-      {ordered ? (
-        <p
-          role="status"
-          className="rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-soft-foreground"
-        >
-          Заказ принят, идея в очереди. Робот берёт её в течение десяти минут, дальше ролик
-          собирается примерно за шесть.
-        </p>
-      ) : null}
+      <AutoRefresh everyMs={8000} active={data.active.some((o) => !o.final)} />
+      <ActiveOrders orders={data.active} />
       <section className="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="Показатели">
         <StatCard
           label="В эфире"

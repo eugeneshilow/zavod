@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { api } from "@/convex/_generated/api";
 import { reelsAccess } from "@/lib/reels";
-import { CABINET_PATH, DEMO_CUSTOMER, ORDER_PATH, parseOrder } from "@/lib/cabinet";
+import { CABINET_PATH, DEMO_CUSTOMER, ORDER_BASE, ORDER_PATH, parseOrder } from "@/lib/cabinet";
 
 // Кнопка «Сделать ролик»: форма в мутацию `order` под токеном кабинета на
 // сервере; идея сразу в работе, раннер на Pro берёт её за один тик.
@@ -24,8 +24,9 @@ export async function orderReel(formData: FormData): Promise<void> {
   if ("error" in parsed) back(parsed.error);
   const access = reelsAccess();
   if ("reason" in access) back(access.reason);
+  let id: string;
   try {
-    await access.client.mutation(api.tables.ops_reel_ideas.order, {
+    id = await access.client.mutation(api.tables.ops_reel_ideas.order, {
       token: access.token,
       text: parsed.text,
       voice: parsed.voice,
@@ -37,5 +38,5 @@ export async function orderReel(formData: FormData): Promise<void> {
     back(error instanceof Error ? error.message : String(error));
   }
   revalidatePath(CABINET_PATH);
-  redirect(`${CABINET_PATH}?order=ok`);
+  redirect(`${ORDER_BASE}/${id}`);
 }
