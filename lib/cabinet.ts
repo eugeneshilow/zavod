@@ -256,3 +256,60 @@ export function fmt(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   return new Intl.NumberFormat("ru-RU").format(n);
 }
+
+// Экран заказа «Сделать ролик» — раздел «Экран заказа» канона docs/cabinet/README.md.
+// Слова здесь, экран только рисует; механика нажатия — следующий заход.
+
+export const ORDER_PATH = `${CABINET_PATH}/new`;
+
+/** Голоса рассказчика: имя для покупателя и параметр `voice` истории (docs/reels.md). */
+export const VOICES = [
+  {
+    id: "ermil",
+    name: "Ермил",
+    note: "голос канала, спокойный",
+    voice: "yandex:ermil:good",
+    isDefault: true,
+  },
+  {
+    id: "alexander",
+    name: "Александр",
+    note: "ниже, деловой",
+    voice: "yandex:alexander:good",
+    isDefault: false,
+  },
+  {
+    id: "alena",
+    name: "Алёна",
+    note: "женский, тёплый",
+    voice: "yandex:alena:good",
+    isDefault: false,
+  },
+] as const;
+
+/** Куда выложить: двери публикации словами покупателя, площадка по имени не зовётся. */
+export const DESTINATIONS = [
+  { id: "reels", label: "Площадка коротких видео, канал завода", on: true },
+  { id: "telegram", label: "Telegram", on: true },
+  { id: "download", label: "Только скачать", on: false },
+] as const;
+
+/** Что получится: части ролика, как их называет витрина. */
+export const REEL_PARTS = [
+  "до 60 секунд, вертикальный",
+  "закадровый голос",
+  "карточки с цифрами",
+  "цитаты постов",
+  "субтитры слово в слово",
+  "подпись к посту",
+] as const;
+
+/** Что происходит после нажатия: три шага рельсы с примерным временем. */
+export const ORDER_STEPS = [
+  { title: "Сюжет", note: "агент читает идею и пишет историю", time: "≈ 1 мин" },
+  { title: "Голос и монтаж", note: "озвучка, карточки, субтитры", time: "≈ 4 мин" },
+  { title: "Публикация", note: "двери выкладывают, ссылка появляется в таблице", time: "" },
+] as const;
+
+/** Подсказка под полем идеи: что подойдёт. */
+export const IDEA_HINT = "Ссылка на новость, пост или просто мысль своими словами";
