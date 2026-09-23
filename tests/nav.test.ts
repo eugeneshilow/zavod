@@ -49,7 +49,13 @@ describe("дерево хедера из списка в docs/admin.md", () => {
     const tree = await navTree();
     const hrefs = (tree.children ?? []).map((zone) => zone.href);
     expect(tree.href).toBe("/admin");
-    expect(hrefs).toEqual(["/admin/brains", "/admin/social", "/admin/brand", "/admin/cabinet"]);
+    expect(hrefs).toEqual([
+      "/admin/brains",
+      "/admin/social",
+      "/admin/brand",
+      "/admin/cabinet",
+      "/admin/customers",
+    ]);
     expect(hrefs).not.toContain("/admin/reels");
     expect(hrefs).not.toContain("/admin/journal");
     for (const node of flattenNav(tree)) expect(node.href).toBe(hrefOf(node.doc));
