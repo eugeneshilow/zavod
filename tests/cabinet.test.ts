@@ -12,6 +12,7 @@ import {
   isAppHost,
   reelTitle,
   VOICES,
+  parseOrder,
   DESTINATIONS,
   type CabinetData,
 } from "@/lib/cabinet";
@@ -19,6 +20,9 @@ import type { Idea } from "@/lib/social";
 import type { AirtimeRow } from "@/lib/reels";
 import CabinetHome from "@/app/cabinet/page";
 import CabinetNew from "@/app/cabinet/new/page";
+import { ORDER_VOICES } from "@/convex/tables/ops_reel_ideas";
+
+vi.mock("@/app/cabinet/new/actions", () => ({ orderReel: async () => {} }));
 
 // Зона cabinet: хост app. ведёт в кабинет, блоки экрана читаются из канона,
 // числа собираются чисто, экран без базы говорит причину. Канон —
@@ -54,10 +58,22 @@ describe("хост кабинета", () => {
   });
 
   it("proxy: с хоста app. главная уезжает в кабинет, с основного — нет", () => {
-    const onApp = proxy(
+    process.env.ADMIN_PASSWORD = "test-pass";
+    const basic = `Basic ${btoa("owner:test-pass")}`;
+    const locked = proxy(
       new NextRequest("http://app.localhost:3400/", { headers: { host: "app.localhost:3400" } }),
     );
+    expect(locked.status).toBe(401);
+    const onApp = proxy(
+      new NextRequest("http://app.localhost:3400/", {
+        headers: { host: "app.localhost:3400", authorization: basic },
+      }),
+    );
     expect(onApp.headers.get("x-middleware-rewrite")).toContain("/cabinet");
+    const cabinetOnMain = proxy(
+      new NextRequest("http://localhost:3400/cabinet/new", { headers: { host: "localhost:3400" } }),
+    );
+    expect(cabinetOnMain.status).toBe(401);
     const onMain = proxy(
       new NextRequest("http://localhost:3400/", { headers: { host: "localhost:3400" } }),
     );
@@ -197,7 +213,9 @@ describe("сборка чисел", () => {
 describe("экран кабинета", () => {
   it("без пропуска к базе называет причину", async () => {
     mocked.data = { reason: "не задан ADMIN_API_TOKEN" };
-    const html = renderToStaticMarkup(await CabinetHome());
+    const html = renderToStaticMarkup(
+      await CabinetHome({ searchParams: Promise.resolve({}) } as never),
+    );
     expect(html).toContain("не задан ADMIN_API_TOKEN");
     mocked.data = null;
   });
@@ -207,7 +225,10 @@ describe("экран кабинета", () => {
       { airtime: [air({ mediaId: "m1", metrics: { views: 700 } })], ideas: [idea({ id: "i1" })] },
       now,
     );
-    const html = renderToStaticMarkup(await CabinetHome());
+    const html = renderToStaticMarkup(
+      await CabinetHome({ searchParams: Promise.resolve({ order: "ok" }) } as never),
+    );
+    expect(html).toContain("Заказ принят");
     expect(html).toContain("Доброе утро, Евгений");
     expect(html).toContain("В эфире");
     expect(html).toContain("в очереди");
@@ -218,18 +239,42 @@ describe("экран кабинета", () => {
 
 describe("экран заказа", () => {
   it("голос по умолчанию один — голос канала; площадка без имени", () => {
-    expect(VOICES.filter((v) => v.isDefault).map((v) => v.id)).toEqual(["ermil"]);
-    expect(VOICES.every((v) => v.voice.startsWith("yandex:"))).toBe(true);
+    expect(VOICES.filter((v) => v.isDefault).map((v) => v.id)).toEqual(["stanislav"]);
+    expect(VOICES.map((v) => v.voice)).toEqual([...ORDER_VOICES]);
     expect(DESTINATIONS.map((d) => d.id)).toEqual(["reels", "telegram", "download"]);
   });
 
-  it("рисует четыре шага, кнопку и честную строку про механику", () => {
-    const html = renderToStaticMarkup(CabinetNew());
+  it("рисует четыре шага, кнопку и причину отказа", async () => {
+    const html = renderToStaticMarkup(
+      await CabinetNew({ searchParams: Promise.resolve({ error: "идея пустая" }) } as never),
+    );
     expect(html).toContain("Идея ролика");
     expect(html).toContain("Голос рассказчика");
     expect(html).toContain("Куда выложить");
     expect(html).toContain("Пожелание");
     expect(html).toContain("Сделать ролик");
-    expect(html).toContain("механика подключается следующим шагом");
+    expect(html).toContain("Заказ не принят: идея пустая");
+  });
+
+  it("форма в поля заказа: двери, только скачать, пустая идея, чужой голос", () => {
+    expect(
+      parseOrder({ idea: " ставку оставили ", voice: "egor", to: ["reels", "telegram"] }),
+    ).toEqual({
+      text: "ставку оставили",
+      voice: "eleven:6A9D8WSMm4rFsg2DWFeE",
+      to: ["instagram", "telegram"],
+      wish: "",
+    });
+    expect(parseOrder({ idea: "x", voice: "stanislav", to: ["reels", "download"] })).toMatchObject({
+      to: [],
+    });
+    expect(
+      parseOrder({ idea: "x", voice: "stanislav", to: [], note: " без шуток " }),
+    ).toMatchObject({
+      to: [],
+      wish: "без шуток",
+    });
+    expect(parseOrder({ idea: "  ", voice: "stanislav" })).toHaveProperty("error");
+    expect(parseOrder({ idea: "x", voice: "ermil" })).toHaveProperty("error");
   });
 });

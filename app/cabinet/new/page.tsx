@@ -4,7 +4,9 @@ import { OrderPreview } from "@/components/cabinet/order-preview";
 
 // Экран заказа «Сделать ролик» — раздел «Экран заказа» канона docs/cabinet/README.md.
 
-export default function CabinetNew() {
+export default async function CabinetNew({ searchParams }: PageProps<"/cabinet/new">) {
+  const params = await searchParams;
+  const error = typeof params.error === "string" ? params.error : null;
   return (
     <>
       <Header
@@ -13,7 +15,7 @@ export default function CabinetNew() {
         order={false}
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <OrderForm />
+        <OrderForm error={error} />
         <OrderPreview />
       </div>
     </>

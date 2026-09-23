@@ -262,37 +262,66 @@ export function fmt(n: number | null | undefined): string {
 
 export const ORDER_PATH = `${CABINET_PATH}/new`;
 
-/** Голоса рассказчика: имя для покупателя и параметр `voice` истории (docs/reels.md). */
+/**
+ * Голоса рассказчика: имя для покупателя и параметр `voice` истории
+ * (docs/reels.md, таблица голосов). Только те, что раннер озвучивает сам;
+ * тот же список держит мутация `order` (ORDER_VOICES).
+ */
 export const VOICES = [
   {
-    id: "ermil",
-    name: "Ермил",
-    note: "голос канала, спокойный",
-    voice: "yandex:ermil:good",
+    id: "stanislav",
+    name: "Станислав",
+    note: "голос канала, глубокий и тёплый",
+    voice: "eleven:ogi2DyUAKJb7CEdqqvlU",
     isDefault: true,
   },
   {
-    id: "alexander",
-    name: "Александр",
-    note: "ниже, деловой",
-    voice: "yandex:alexander:good",
-    isDefault: false,
-  },
-  {
-    id: "alena",
-    name: "Алёна",
-    note: "женский, тёплый",
-    voice: "yandex:alena:good",
+    id: "egor",
+    name: "Егор",
+    note: "чёткий, командный",
+    voice: "eleven:6A9D8WSMm4rFsg2DWFeE",
     isDefault: false,
   },
 ] as const;
 
-/** Куда выложить: двери публикации словами покупателя, площадка по имени не зовётся. */
+/**
+ * Куда выложить: двери публикации словами покупателя, площадка по имени не
+ * зовётся. `door` — имя двери в очереди публикации; у «только скачать» двери нет.
+ */
 export const DESTINATIONS = [
-  { id: "reels", label: "Площадка коротких видео, канал завода", on: true },
-  { id: "telegram", label: "Telegram", on: true },
-  { id: "download", label: "Только скачать", on: false },
+  { id: "reels", label: "Площадка коротких видео, канал завода", on: true, door: "instagram" },
+  { id: "telegram", label: "Telegram", on: true, door: "telegram" },
+  { id: "download", label: "Только скачать", on: false, door: null },
 ] as const;
+
+export const MAX_IDEA = 4000;
+export const MAX_WISH = 500;
+
+export type OrderInput = { text: string; voice: string; to: string[]; wish: string };
+
+/**
+ * Форма заказа в поля мутации `order`. Пустая идея, чужой голос или длинный
+ * текст — строка причины для экрана. «Только скачать» снимает все двери.
+ */
+export function parseOrder(form: {
+  idea?: string | null;
+  voice?: string | null;
+  to?: string[];
+  note?: string | null;
+}): OrderInput | { error: string } {
+  const text = (form.idea ?? "").trim();
+  if (!text) return { error: "впишите идею ролика: ссылку или пару фраз" };
+  if (text.length > MAX_IDEA) return { error: `идея длиннее ${MAX_IDEA} знаков` };
+  const voice = VOICES.find((v) => v.id === (form.voice ?? ""))?.voice;
+  if (!voice) return { error: "выберите голос рассказчика" };
+  const picked = new Set(form.to ?? []);
+  const to = picked.has("download")
+    ? []
+    : DESTINATIONS.flatMap((d) => (d.door && picked.has(d.id) ? [d.door] : []));
+  const wish = (form.note ?? "").trim();
+  if (wish.length > MAX_WISH) return { error: `пожелание длиннее ${MAX_WISH} знаков` };
+  return { text, voice, to, wish };
+}
 
 /** Что получится: части ролика, как их называет витрина. */
 export const REEL_PARTS = [

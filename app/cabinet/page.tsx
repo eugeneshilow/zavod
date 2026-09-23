@@ -9,7 +9,9 @@ export const dynamic = "force-dynamic";
 
 // Первый экран кабинета — шесть блоков канона docs/cabinet/README.md.
 
-export default async function CabinetHome() {
+export default async function CabinetHome({ searchParams }: PageProps<"/cabinet">) {
+  const params = await searchParams;
+  const ordered = params.order === "ok";
   const data = await loadCabinet();
   if ("reason" in data) {
     return (
@@ -23,6 +25,15 @@ export default async function CabinetHome() {
     <>
       <Header title={greeting(data.now, data.customer.name)} />
       <Tabs active={CABINET_PATH} />
+      {ordered ? (
+        <p
+          role="status"
+          className="rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-soft-foreground"
+        >
+          Заказ принят, идея в очереди. Робот берёт её в течение десяти минут, дальше ролик
+          собирается примерно за шесть.
+        </p>
+      ) : null}
       <section className="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="Показатели">
         <StatCard
           label="В эфире"

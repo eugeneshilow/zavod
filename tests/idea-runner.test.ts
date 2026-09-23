@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPrompt,
+  doorsArg,
   extractJson,
   parseQueueIds,
   parseStorageId,
@@ -62,6 +63,21 @@ describe("задание мозгу", () => {
     expect(prompt).toContain("content/reels/stories/robot-knife.json");
     expect(prompt).toContain('кадры "image" и "video" запрещены');
     expect(prompt).not.toContain("Прошлый ответ отклонён");
+  });
+
+  it("заказ из кабинета: голос покупателя и пожелание в задании", () => {
+    const prompt = buildPrompt("идея", { voice: "eleven:6A9D8WSMm4rFsg2DWFeE", wish: "без шуток" });
+    expect(prompt).toContain('voice: "eleven:6A9D8WSMm4rFsg2DWFeE"');
+    expect(prompt).toContain("Пожелание покупателя");
+    expect(prompt).toContain("без шуток");
+    expect(buildPrompt("идея")).not.toContain("Пожелание покупателя");
+  });
+
+  it("двери заказа для публикации: список, только скачать, без заказа все", () => {
+    expect(doorsArg(null)).toBe("all");
+    expect(doorsArg({ to: ["telegram"] })).toBe("telegram");
+    expect(doorsArg({ to: ["instagram", "telegram"] })).toBe("instagram,telegram");
+    expect(doorsArg({ to: [] })).toBe("none");
   });
 
   it("на второй попытке называет причину отказа", () => {

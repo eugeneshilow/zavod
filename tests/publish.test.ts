@@ -344,6 +344,7 @@ describe("двери в командной строке", () => {
 
   it("понимает одну дверь и список", () => {
     expect(parseChannels("telegram")).toEqual(["telegram"]);
+    expect(parseChannels("none")).toEqual([]);
     expect(parseChannels("Instagram")).toEqual(["instagram"]);
     expect(parseChannels("telegram,instagram,telegram")).toEqual(["telegram", "instagram"]);
   });

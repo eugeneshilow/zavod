@@ -1,22 +1,25 @@
 import { Button, Card } from "@heroui/react";
 import { Plus } from "lucide-react";
-import { DEMO_CUSTOMER, DESTINATIONS, IDEA_HINT, VOICES } from "@/lib/cabinet";
+import { orderReel } from "@/app/cabinet/new/actions";
+import { DEMO_CUSTOMER, DESTINATIONS, IDEA_HINT, MAX_IDEA, MAX_WISH, VOICES } from "@/lib/cabinet";
 
-/** Форма заказа — четыре шага по канону «Экран заказа». Нажатие пока без механики. */
-export function OrderForm() {
+/** Форма заказа — четыре шага по канону «Экран заказа»; нажатие ставит идею в работу. */
+export function OrderForm({ error }: { error?: string | null }) {
   return (
-    <form className="flex flex-col gap-4" aria-label="Заказ ролика">
+    <form action={orderReel} className="flex flex-col gap-4" aria-label="Заказ ролика">
       <Step n={1} title="Идея ролика">
         <input
           name="idea"
           type="text"
+          required
+          maxLength={MAX_IDEA}
           placeholder="Вставьте ссылку или опишите идею"
           className="w-full rounded-xl border border-border bg-surface-secondary px-3 py-2.5 text-sm outline-none focus:border-accent"
         />
         <p className="mt-2 text-xs text-muted">{IDEA_HINT}</p>
       </Step>
       <Step n={2} title="Голос рассказчика">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2">
           {VOICES.map((v) => (
             <label
               key={v.id}
@@ -58,12 +61,13 @@ export function OrderForm() {
         <textarea
           name="note"
           rows={2}
+          maxLength={MAX_WISH}
           placeholder="например: сделай акцент на цифрах, без шуток"
           className="w-full rounded-xl border border-border bg-surface-secondary px-3 py-2.5 text-sm outline-none focus:border-accent"
         />
       </Step>
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" type="button">
+        <Button variant="primary" type="submit">
           <Plus className="size-4" aria-hidden />
           Сделать ролик
         </Button>
@@ -71,9 +75,11 @@ export function OrderForm() {
           ≈ 6 минут · 1 ролик из тарифа «{DEMO_CUSTOMER.plan}»
         </span>
       </div>
-      <p className="text-xs text-muted">
-        Кнопка пока не отправляет заказ: механика подключается следующим шагом стройки.
-      </p>
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          Заказ не принят: {error}.
+        </p>
+      ) : null}
     </form>
   );
 }

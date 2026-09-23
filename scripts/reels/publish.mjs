@@ -42,6 +42,8 @@ export function parseChannels(value) {
     .toLowerCase()
     .trim();
   if (raw === "" || raw === "all") return [...CHANNELS];
+  // Только залить файл: заказ «только скачать» из кабинета, дверей нет.
+  if (raw === "none") return [];
   const asked = raw
     .split(",")
     .map((part) => part.trim())
