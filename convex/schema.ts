@@ -185,6 +185,17 @@ export default defineSchema({
     .index("by_status_created", ["status", "createdAt"])
     .index("by_created", ["createdAt"]),
 
+  // Клиенты завода: человек поверх заказов и оплат. Стадия не хранится —
+  // её считает lib/customers.ts по фактам. Канон — docs/customers/README.md.
+  biz_customers: defineTable({
+    name: v.string(),
+    email: v.optional(v.string()),
+    telegram: v.optional(v.string()),
+    source: v.string(),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_created", ["createdAt"]),
+
   // Дневной снимок аккаунта: подписчики и расход суточного лимита.
   ops_social_snapshots: defineTable({
     network: v.string(),
