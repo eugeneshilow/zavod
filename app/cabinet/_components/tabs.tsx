@@ -1,9 +1,7 @@
 import Link from "next/link";
-import { Button } from "@heroui/react";
-import { CalendarDays, Download } from "lucide-react";
 import { CABINET_TABS } from "@/lib/cabinet";
 
-/** Вкладки-пилюли — блок 3 канона; справа период и отчёт. */
+/** Вкладки-пилюли — блок 3 канона. */
 export function Tabs({ active }: { active: string }) {
   return (
     <div className="flex items-center gap-2">
@@ -29,15 +27,6 @@ export function Tabs({ active }: { active: string }) {
           );
         })}
       </nav>
-      <div className="flex-1" />
-      <Button variant="outline" size="sm">
-        <CalendarDays className="size-4" aria-hidden />
-        Месяц
-      </Button>
-      <Button variant="outline" size="sm">
-        <Download className="size-4" aria-hidden />
-        Отчёт
-      </Button>
     </div>
   );
 }

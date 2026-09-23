@@ -1,10 +1,25 @@
 import { Card } from "@heroui/react";
 import { SubmitOrder } from "./submit-order";
 import { orderReel } from "@/app/cabinet/new/actions";
-import { DEMO_CUSTOMER, DESTINATIONS, IDEA_HINT, MAX_IDEA, MAX_WISH, VOICES } from "@/lib/cabinet";
+import {
+  DEFAULT_PREFS,
+  DEMO_CUSTOMER,
+  DESTINATIONS,
+  IDEA_HINT,
+  MAX_IDEA,
+  MAX_WISH,
+  VOICES,
+  type Prefs,
+} from "@/lib/cabinet";
 
 /** Форма заказа — четыре шага по канону «Экран заказа»; нажатие ставит идею в работу. */
-export function OrderForm({ error }: { error?: string | null }) {
+export function OrderForm({
+  error,
+  prefs = DEFAULT_PREFS,
+}: {
+  error?: string | null;
+  prefs?: Prefs;
+}) {
   return (
     <form action={orderReel} className="flex flex-col gap-4" aria-label="Заказ ролика">
       <Step n={1} title="Идея ролика">
@@ -29,7 +44,7 @@ export function OrderForm({ error }: { error?: string | null }) {
                 type="radio"
                 name="voice"
                 value={v.id}
-                defaultChecked={v.isDefault}
+                defaultChecked={v.id === prefs.voice}
                 className="sr-only"
               />
               <span className="text-sm font-medium">{v.name}</span>
@@ -49,7 +64,7 @@ export function OrderForm({ error }: { error?: string | null }) {
                 type="checkbox"
                 name="to"
                 value={d.id}
-                defaultChecked={d.on}
+                defaultChecked={prefs.to.includes(d.id)}
                 className="size-3.5 accent-[var(--accent)]"
               />
               {d.label}
