@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Download, ExternalLink, Loader2, X } from "lucide-react";
 import type { OrderStep, OrderView } from "@/lib/cabinet";
+import { CancelOrder } from "./cancel-order";
 import { Since } from "./since";
 
 // Страница заказа: полоса пути, шесть шагов и ролик, когда готов. Анимации —
@@ -16,7 +17,7 @@ const TIME = new Intl.DateTimeFormat("ru-RU", {
   minute: "2-digit",
 });
 
-export function OrderProgress({ view }: { view: OrderView }) {
+export function OrderProgress({ view, error }: { view: OrderView; error?: string | null }) {
   // Прошлые состояния шагов держим в состоянии, а не в ссылке: экран сравнивает
   // их с новыми при обновлении и «щёлкает» только шагом, сменившимся на глазах.
   const key = view.steps.map((s) => s.state).join(",");
@@ -49,7 +50,9 @@ export function OrderProgress({ view }: { view: OrderView }) {
 
         <div className="mt-6 h-2.5 overflow-hidden rounded-full bg-surface-tertiary">
           <motion.div
-            className={`relative h-full rounded-full ${view.failed ? "bg-danger" : "bg-accent"}`}
+            className={`relative h-full rounded-full ${
+              view.failed ? "bg-danger" : view.cancelled ? "bg-border-tertiary" : "bg-accent"
+            }`}
             initial={false}
             animate={{ width: `${Math.round(view.progress * 100)}%` }}
             transition={{ type: "spring", stiffness: 60, damping: 18 }}
@@ -73,7 +76,9 @@ export function OrderProgress({ view }: { view: OrderView }) {
             transition={{ duration: 0.25 }}
             className="mt-3 flex items-center gap-2 text-sm font-medium"
           >
-            {view.failed ? (
+            {view.cancelled ? (
+              <span className="text-muted">Заказ отменён</span>
+            ) : view.failed ? (
               <span className="text-danger">Не вышло: {current?.title.toLowerCase()}</span>
             ) : running && current ? (
               <>
@@ -85,6 +90,19 @@ export function OrderProgress({ view }: { view: OrderView }) {
             ) : null}
           </motion.p>
         </AnimatePresence>
+
+        <AnimatePresence initial={false}>
+          {view.cancellable ? (
+            <motion.div key="cancel" exit={{ opacity: 0, height: 0 }} className="mt-4">
+              <CancelOrder id={view.id} />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        {error ? (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            Не отменилось: {error}.
+          </p>
+        ) : null}
 
         <ol className="mt-6 flex flex-col">
           {view.steps.map((step, i) => (
@@ -171,7 +189,9 @@ function ResultCard({ view }: { view: OrderView }) {
   const ready = view.steps.find((s) => s.key === "ready")?.state === "done";
   return (
     <section className="rounded-3xl border border-border bg-surface p-6">
-      <p className="text-sm font-medium">{ready ? "Ваш ролик" : "Здесь появится ролик"}</p>
+      <p className="text-sm font-medium">
+        {ready ? "Ваш ролик" : view.cancelled ? "Ролика не будет" : "Здесь появится ролик"}
+      </p>
       <div className="mt-4 flex justify-center">
         <AnimatePresence mode="wait">
           {ready && view.videoUrl ? (
@@ -215,7 +235,7 @@ function ResultCard({ view }: { view: OrderView }) {
               className="relative aspect-[9/16] w-[240px] overflow-hidden rounded-2xl bg-surface-secondary"
               aria-hidden
             >
-              {!view.failed ? (
+              {!view.failed && !view.cancelled ? (
                 <motion.span
                   className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent"
                   animate={{ x: ["-100%", "250%"] }}

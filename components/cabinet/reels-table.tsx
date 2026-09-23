@@ -13,6 +13,7 @@ const CHIP: Record<
   queued: { color: "default", variant: "secondary" },
   ready: { color: "success", variant: "secondary" },
   publishing: { color: "warning", variant: "secondary" },
+  cancelled: { color: "default", variant: "secondary" },
   failed: { color: "danger", variant: "soft" },
   deleted: { color: "default", variant: "secondary" },
 };

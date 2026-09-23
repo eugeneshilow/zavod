@@ -14,6 +14,7 @@ import {
   ideaTitle,
   orderSteps,
   orderView,
+  isCancellable,
   VOICES,
   parseOrder,
   DESTINATIONS,
@@ -26,6 +27,7 @@ import CabinetNew from "@/app/cabinet/new/page";
 import { ORDER_VOICES } from "@/convex/tables/ops_reel_ideas";
 
 vi.mock("@/app/cabinet/new/actions", () => ({ orderReel: async () => {} }));
+vi.mock("@/app/cabinet/orders/actions", () => ({ cancelOrder: async () => {} }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ refresh: () => {} }),
@@ -381,5 +383,49 @@ describe("заказ по шагам", () => {
     expect(data.rows.find((r) => r.id === "a2")?.status).toBe("ready");
     expect(data.rows.find((r) => r.id === "a1")?.orderHref).toBe("/cabinet/orders/a1");
     expect(data.stats.queued).toBe(1);
+  });
+});
+
+describe("отмена заказа", () => {
+  const order = { voice: "eleven:ogi2DyUAKJb7CEdqqvlU", to: ["telegram"], source: "cabinet" };
+
+  it("отменить можно, пока ролик не вышел везде", () => {
+    expect(isCancellable(idea({ id: "c1", order }))).toBe(true);
+    expect(isCancellable(idea({ id: "c2", status: "taken", order }))).toBe(true);
+    expect(isCancellable(idea({ id: "c3", status: "done", queueCount: 1, order }))).toBe(true);
+    expect(isCancellable(idea({ id: "c4", status: "done", queueCount: 0, posted: true }))).toBe(
+      false,
+    );
+  });
+
+  it("отменённый заказ: путь закончен, серый, эфир пропущен, отменять больше нечего", () => {
+    const v = orderView(
+      idea({
+        id: "c5",
+        status: "failed",
+        takenAt: now,
+        phase: "render",
+        error: "отменён покупателем",
+        order,
+      }),
+    );
+    expect(v.cancelled).toBe(true);
+    expect(v.failed).toBe(false);
+    expect(v.final).toBe(true);
+    expect(v.cancellable).toBe(false);
+    expect(v.steps.find((s) => s.key === "render")?.state).toBe("skip");
+    expect(v.steps.at(-1)?.note).toBe("отменено");
+  });
+
+  it("собранный ждёт эфира: шаг так и называется", () => {
+    const v = orderView(idea({ id: "c6", status: "done", doneAt: now, queueCount: 1, order }));
+    expect(v.steps.at(-1)?.title).toBe("Ждёт эфира");
+    expect(v.cancellable).toBe(true);
+  });
+
+  it("длинная ссылка в заголовке сжимается до домена", () => {
+    expect(
+      ideaTitle(null, "Юзкейсы Джева https://x.com/rakshaa_t/status/2101950814545961082"),
+    ).toBe("Юзкейсы Джева x.com/…");
   });
 });

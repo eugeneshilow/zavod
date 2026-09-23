@@ -11,8 +11,13 @@ export const dynamic = "force-dynamic";
 // сервер каждые четыре секунды, пока путь не закончен.
 // Канон — docs/cabinet/README.md, «Страница заказа».
 
-export default async function CabinetOrder({ params }: PageProps<"/cabinet/orders/[id]">) {
+export default async function CabinetOrder({
+  params,
+  searchParams,
+}: PageProps<"/cabinet/orders/[id]">) {
   const { id } = await params;
+  const query = await searchParams;
+  const error = typeof query.error === "string" ? query.error : null;
   const view = await loadOrder(id);
   if (view === null || (view && "reason" in view)) {
     return (
@@ -31,7 +36,7 @@ export default async function CabinetOrder({ params }: PageProps<"/cabinet/order
     <>
       <Header title="Заказ ролика" subtitle="Шаги обновляются сами" />
       <AutoRefresh everyMs={4000} active={!view.final} />
-      <OrderProgress view={view} />
+      <OrderProgress view={view} error={error} />
     </>
   );
 }

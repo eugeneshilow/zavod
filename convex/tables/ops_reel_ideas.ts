@@ -382,6 +382,39 @@ export const rewrite = mutation({
   },
 });
 
+export const CANCELLED = "отменён покупателем";
+
+/**
+ * Кнопка «Отменить» в кабинете: заказ ждёт робота или в работе — failed с
+ * пометкой (раннер уйдёт сам на следующей фазе); собран и ждёт эфира — снимаем
+ * невышедшие двери. Если какая-то дверь уже выложила ролик, заказ остаётся
+ * готовым, снимаются только остальные. Всё вышло — отменять нечего.
+ */
+export const cancelOrder = mutation({
+  args: { token: v.string(), id: v.id("ops_reel_ideas") },
+  returns: v.object({ cancelled: v.number(), status: v.string() }),
+  handler: async (ctx, args) => {
+    requireAdminToken(args.token);
+    const row = await ctx.db.get(args.id);
+    if (!row) throw new Error("заказа с таким id нет");
+    if (row.status === "pending" || row.status === "new" || row.status === "taken") {
+      await ctx.db.patch(args.id, { status: "failed", error: CANCELLED });
+      return { cancelled: 0, status: "failed" };
+    }
+    if (row.status !== "done") throw new Error("заказ уже не в работе");
+    let posted = 0;
+    for (const raw of row.queueIds ?? []) {
+      const id = ctx.db.normalizeId("data_cooked_instagram_reels", raw);
+      const queued = id ? await ctx.db.get(id) : null;
+      if (queued?.status === "posted") posted += 1;
+    }
+    const cancelled = await cancelQueue(ctx, row.queueIds ?? [], CANCELLED);
+    if (cancelled === 0) throw new Error("ролик уже в эфире, снимать нечего");
+    if (posted === 0) await ctx.db.patch(args.id, { status: "failed", error: CANCELLED });
+    return { cancelled, status: posted === 0 ? "failed" : "done" };
+  },
+});
+
 /** Кнопка «Снять»: done -> failed, строки очереди тоже снимаются. */
 export const withdraw = mutation({
   args: { token: v.string(), id: v.id("ops_reel_ideas") },
