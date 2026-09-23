@@ -11,11 +11,14 @@ import {
   greeting,
   isAppHost,
   reelTitle,
+  VOICES,
+  DESTINATIONS,
   type CabinetData,
 } from "@/lib/cabinet";
 import type { Idea } from "@/lib/social";
 import type { AirtimeRow } from "@/lib/reels";
 import CabinetHome from "@/app/cabinet/page";
+import CabinetNew from "@/app/cabinet/new/page";
 
 // Зона cabinet: хост app. ведёт в кабинет, блоки экрана читаются из канона,
 // числа собираются чисто, экран без базы говорит причину. Канон —
@@ -210,5 +213,23 @@ describe("экран кабинета", () => {
     expect(html).toContain("в очереди");
     expect(html).toContain("Сделать ролик");
     mocked.data = null;
+  });
+});
+
+describe("экран заказа", () => {
+  it("голос по умолчанию один — голос канала; площадка без имени", () => {
+    expect(VOICES.filter((v) => v.isDefault).map((v) => v.id)).toEqual(["ermil"]);
+    expect(VOICES.every((v) => v.voice.startsWith("yandex:"))).toBe(true);
+    expect(DESTINATIONS.map((d) => d.id)).toEqual(["reels", "telegram", "download"]);
+  });
+
+  it("рисует четыре шага, кнопку и честную строку про механику", () => {
+    const html = renderToStaticMarkup(CabinetNew());
+    expect(html).toContain("Идея ролика");
+    expect(html).toContain("Голос рассказчика");
+    expect(html).toContain("Куда выложить");
+    expect(html).toContain("Пожелание");
+    expect(html).toContain("Сделать ролик");
+    expect(html).toContain("механика подключается следующим шагом");
   });
 });

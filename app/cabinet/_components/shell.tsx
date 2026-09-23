@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Avatar, Button } from "@heroui/react";
+import { buttonVariants } from "@heroui/styles";
 import {
   BarChart3,
   Bell,
@@ -13,7 +14,7 @@ import {
   Settings,
 } from "lucide-react";
 import { Mark } from "@/components/brand/logo";
-import { CABINET_NAV, DEMO_CUSTOMER } from "@/lib/cabinet";
+import { CABINET_NAV, DEMO_CUSTOMER, ORDER_PATH } from "@/lib/cabinet";
 
 const ICON = {
   home: Home,
@@ -76,21 +77,34 @@ export function Sidebar({ queued }: { queued?: number }) {
   );
 }
 
-/** Шапка — блок 2 канона: приветствие, поиск, звонок, одна кнопка. */
-export function Header({ title }: { title: string }) {
+/** Шапка — блок 2 канона: приветствие, поиск, звонок, одна кнопка на экран заказа. */
+export function Header({
+  title,
+  subtitle,
+  order = true,
+}: {
+  title: string;
+  subtitle?: string;
+  order?: boolean;
+}) {
   return (
     <header className="flex items-center gap-3">
-      <h1 className="flex-1 text-2xl font-semibold tracking-tight">{title}</h1>
+      <div className="flex-1">
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {subtitle ? <p className="text-sm text-muted">{subtitle}</p> : null}
+      </div>
       <Button variant="ghost" isIconOnly aria-label="Поиск">
         <Search className="size-4" aria-hidden />
       </Button>
       <Button variant="ghost" isIconOnly aria-label="Уведомления">
         <Bell className="size-4" aria-hidden />
       </Button>
-      <Button variant="primary">
-        <Plus className="size-4" aria-hidden />
-        Сделать ролик
-      </Button>
+      {order ? (
+        <Link href={ORDER_PATH} className={buttonVariants({ variant: "primary", size: "md" })}>
+          <Plus className="size-4" aria-hidden />
+          Сделать ролик
+        </Link>
+      ) : null}
     </header>
   );
 }
