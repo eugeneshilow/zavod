@@ -171,6 +171,16 @@ export default defineSchema({
     // Почему не вышло. Живёт отдельно от note: note — след раннера, error —
     // причина, которую владелец читает плашкой.
     error: v.optional(v.string()),
+    // Заказ из кабинета покупателя: голос истории, двери публикации (пусто —
+    // только скачать) и пожелание писателю. Канон — docs/cabinet/README.md.
+    order: v.optional(
+      v.object({
+        voice: v.string(),
+        to: v.array(v.string()),
+        wish: v.optional(v.string()),
+        source: v.string(),
+      }),
+    ),
   })
     .index("by_status_created", ["status", "createdAt"])
     .index("by_created", ["createdAt"]),

@@ -55,6 +55,13 @@ const writerValidator = v.object({
 
 const voiceValidator = v.object({ model: v.string(), chars: v.number(), costUsd: v.number() });
 
+const orderValidator = v.object({
+  voice: v.string(),
+  to: v.array(v.string()),
+  wish: v.optional(v.string()),
+  source: v.string(),
+});
+
 const ideaValidator = v.object({
   id: v.id("ops_reel_ideas"),
   text: v.string(),
@@ -78,6 +85,7 @@ const ideaValidator = v.object({
   elapsedMs: v.union(v.number(), v.null()),
   queueIds: v.array(v.string()),
   error: v.union(v.string(), v.null()),
+  order: v.union(orderValidator, v.null()),
 });
 
 /** Та же идея плюс то, что известно о ней из очереди публикации и хранилища. */
@@ -119,6 +127,7 @@ function shape(row: Doc<"ops_reel_ideas">) {
     elapsedMs: row.elapsedMs ?? null,
     queueIds: row.queueIds ?? [],
     error: row.error ?? null,
+    order: row.order ?? null,
   };
 }
 
@@ -138,6 +147,46 @@ export const add = mutation({
       createdAt: Date.now(),
       status: "pending",
       account: args.account ?? "ruvibecoding",
+    });
+  },
+});
+
+/** Голоса, которые раннер умеет озвучивать для заказа: голос канала и второй. */
+export const ORDER_VOICES = ["eleven:ogi2DyUAKJb7CEdqqvlU", "eleven:6A9D8WSMm4rFsg2DWFeE"];
+const ORDER_DOORS = ["instagram", "telegram"];
+const MAX_WISH = 500;
+
+/**
+ * Заказ из кабинета: идея сразу в работу (new), без выбора владельцем, с
+ * голосом, дверями и пожеланием. Кабинет зовёт мутацию со своего сервера под
+ * тем же токеном, покупатель токена не видит. Канон — docs/cabinet/README.md.
+ */
+export const order = mutation({
+  args: {
+    token: v.string(),
+    text: v.string(),
+    voice: v.string(),
+    to: v.array(v.string()),
+    wish: v.optional(v.string()),
+    account: v.optional(v.string()),
+  },
+  returns: v.id("ops_reel_ideas"),
+  handler: async (ctx, args) => {
+    requireAdminToken(args.token);
+    const text = args.text.trim();
+    if (text.length === 0) throw new Error("идея пустая");
+    if (text.length > MAX_TEXT) throw new Error(`идея длиннее ${MAX_TEXT} символов`);
+    if (!ORDER_VOICES.includes(args.voice)) throw new Error(`голоса ${args.voice} нет`);
+    const to = [...new Set(args.to)];
+    for (const door of to) if (!ORDER_DOORS.includes(door)) throw new Error(`двери ${door} нет`);
+    const wish = (args.wish ?? "").trim();
+    if (wish.length > MAX_WISH) throw new Error(`пожелание длиннее ${MAX_WISH} символов`);
+    return await ctx.db.insert("ops_reel_ideas", {
+      text,
+      createdAt: Date.now(),
+      status: "new",
+      account: args.account ?? "ruvibecoding",
+      order: { voice: args.voice, to, source: "cabinet", ...(wish ? { wish } : {}) },
     });
   },
 });

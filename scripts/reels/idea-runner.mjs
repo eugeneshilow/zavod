@@ -164,8 +164,8 @@ function fence(text) {
  * Задание мозгу `short-videos`: что прочитать, что написать и чего не брать.
  * Вторая попытка получает причину отказа первой — она дописывается в конец.
  */
-export function buildPrompt(idea, { retryReason = "" } = {}) {
-  const { words, beats, captionMax, recipe, sample, voice } = RUNNER;
+export function buildPrompt(idea, { retryReason = "", voice = RUNNER.voice, wish = "" } = {}) {
+  const { words, beats, captionMax, recipe, sample } = RUNNER;
   const lines = [
     "Ты — мозг short-videos завода: писатель коротких вертикальных роликов.",
     "",
@@ -177,6 +177,9 @@ export function buildPrompt(idea, { retryReason = "" } = {}) {
     "Идея владельца:",
     fence(idea),
     "",
+    ...(wish
+      ? ["Пожелание покупателя к ролику (учти, если не спорит с правилами ниже):", fence(wish), ""]
+      : []),
     "Если в идее есть ссылка — открой её инструментом WebFetch и бери факты только оттуда.",
     "Ссылки нет — пиши по тексту идеи и ничего не выдумывай сверх него.",
     "",
@@ -392,7 +395,7 @@ function askClaude(prompt) {
  * История по идее: одна попытка, и ещё одна с причиной отказа. Счёт за обе
  * попытки складывается: отклонённый ответ тоже стоил денег.
  */
-export function writeStory(ideaText) {
+export function writeStory(ideaText, { voice = RUNNER.voice, wish = "" } = {}) {
   const startedAt = Date.now();
   const writer = { model: RUNNER.model, inputTokens: 0, outputTokens: 0, costUsd: 0, ms: 0 };
   const bill = (usage) => {
@@ -404,7 +407,9 @@ export function writeStory(ideaText) {
   let reason = "";
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     log(`пишу историю, попытка ${attempt}...`);
-    const answer = askClaude(buildPrompt(ideaText, { retryReason: attempt === 1 ? "" : reason }));
+    const answer = askClaude(
+      buildPrompt(ideaText, { retryReason: attempt === 1 ? "" : reason, voice, wish }),
+    );
     bill(answer.usage);
     writer.ms = Date.now() - startedAt;
     let raw;
@@ -415,6 +420,8 @@ export function writeStory(ideaText) {
       log(`ответ отклонён: ${reason}`);
       continue;
     }
+    // Голос заказа — решение покупателя, не писателя: ставим его поверх ответа.
+    if (raw && typeof raw === "object") raw.voice = voice;
     const check = validateStory(raw);
     if (check.ok) return { raw, check, writer };
     reason = check.problems.join("; ");
@@ -451,8 +458,14 @@ export function renderStoryFile(storyPath, outPath) {
 }
 
 /** Готовый ролик — в очередь публикации, обе двери, прод. */
-export function publishFile(file, caption, { account } = {}) {
-  const args = ["scripts/reels/publish.mjs", file, caption, "--to", "all", "--prod"];
+/** Двери заказа строкой для publish.mjs: пусто — только залить файл. */
+export function doorsArg(order) {
+  if (!order) return "all";
+  return order.to.length ? order.to.join(",") : "none";
+}
+
+export function publishFile(file, caption, { account, to = "all" } = {}) {
+  const args = ["scripts/reels/publish.mjs", file, caption, "--to", to, "--prod"];
   if (account && account !== "ruvibecoding") args.push("--account", account);
   const out = runNode(args, { timeoutMs: RUNNER.publishTimeoutMs, what: "публикация" });
   for (const line of out.trim().split("\n")) log(`публикация: ${line}`);
@@ -497,7 +510,12 @@ async function tick() {
   try {
     await ensureTaken(client, token, idea.id);
     await client.mutation(ideas.setPhase, { token, id: idea.id, phase: "story" });
-    const { raw, check, writer } = writeStory(idea.text);
+    const order = idea.order ?? null;
+    if (order) log(`заказ из кабинета: голос ${order.voice}, двери ${doorsArg(order)}`);
+    const { raw, check, writer } = writeStory(idea.text, {
+      voice: order?.voice ?? RUNNER.voice,
+      wish: order?.wish ?? "",
+    });
     const id = uniqueStoryId(String(raw.id), idTaken);
     raw.id = id;
     storyJson = `${JSON.stringify(raw, null, 2)}\n`;
@@ -531,7 +549,10 @@ async function tick() {
 
     await ensureTaken(client, token, idea.id);
     await client.mutation(ideas.setPhase, { token, id: idea.id, phase: "publish" });
-    const queued = publishFile(videoPath, check.caption, { account: idea.account });
+    const queued = publishFile(videoPath, check.caption, {
+      account: idea.account,
+      to: doorsArg(order),
+    });
 
     const totalCostUsd =
       Math.round((writer.costUsd + voice.costUsd + Number.EPSILON) * 10000) / 10000;
