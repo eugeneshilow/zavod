@@ -1,13 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cabinetRewrite, isAppHost } from "@/lib/cabinet";
+import { checkSession, cookieOptions, makeSession, SESSION_COOKIE } from "@/lib/admin-session";
 
 // Две работы на входе: хост `app.` переписывается на кабинет (канон —
-// docs/cabinet/README.md), а /admin закрыт паролем (канон — docs/admin.md).
+// docs/cabinet/README.md), а /admin и кабинет закрыты входом (канон —
+// docs/admin.md «Доступ»). Вход — кука на 90 дней со страницы /login;
+// заголовок Basic принимается тоже, для скриптов и тестов.
 
-// Кабинет за паролем админки до входа покупателя: кнопка «Сделать ролик»
-// ставит ролик в эфир канала завода, открытой её держать нельзя.
+const OPEN = ["/login", "/logout"];
 
-function authorized(request: NextRequest, expected: string): boolean {
+function basicOk(request: NextRequest, expected: string): boolean {
   const header = request.headers.get("authorization") ?? "";
   const [scheme, encoded] = header.split(" ");
   if (scheme !== "Basic" || !encoded) return false;
@@ -15,26 +17,43 @@ function authorized(request: NextRequest, expected: string): boolean {
   return decoded.slice(decoded.indexOf(":") + 1) === expected;
 }
 
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const onApp = isAppHost(request.headers.get("host"));
-  const closed = onApp || pathname.startsWith("/admin") || pathname.startsWith("/cabinet");
+export async function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  const host = request.headers.get("host");
+  const onApp = isAppHost(host);
+  const open = OPEN.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const closed =
+    !open && (onApp || pathname.startsWith("/admin") || pathname.startsWith("/cabinet"));
   const expected = process.env.ADMIN_PASSWORD;
-  if (closed && expected && !authorized(request, expected)) {
-    return new NextResponse("401 Unauthorized", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="admin"' },
-    });
+
+  let renew = false;
+  if (closed && expected) {
+    const session = await checkSession(request.cookies.get(SESSION_COOKIE)?.value, expected);
+    if (!session.ok && !basicOk(request, expected)) {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return new NextResponse("401 Unauthorized", { status: 401 });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = `?next=${encodeURIComponent(pathname + search)}`;
+      return NextResponse.redirect(url);
+    }
+    renew = session.renew;
   }
-  if (onApp) {
+
+  let response = NextResponse.next();
+  if (onApp && !open) {
     const target = cabinetRewrite(pathname);
     if (target) {
       const url = request.nextUrl.clone();
       url.pathname = target;
-      return NextResponse.rewrite(url);
+      response = NextResponse.rewrite(url);
     }
   }
-  return NextResponse.next();
+  if (renew && expected) {
+    response.cookies.set(SESSION_COOKIE, await makeSession(expected), cookieOptions(host));
+  }
+  return response;
 }
 
 export const config = {

@@ -26,6 +26,7 @@ export function isAppHost(host: string | null | undefined): boolean {
 export function cabinetRewrite(pathname: string): string | null {
   if (pathname.startsWith(CABINET_PATH)) return null;
   if (pathname.startsWith("/_next") || pathname.startsWith("/api")) return null;
+  if (pathname === "/login" || pathname === "/logout") return null;
   return pathname === "/" ? CABINET_PATH : `${CABINET_PATH}${pathname}`;
 }
 

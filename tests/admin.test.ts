@@ -17,17 +17,20 @@ function envPassword(): string {
 }
 
 describe("/admin", () => {
-  it("без пароля отвечает 401", () => {
+  it("без входа ведёт на страницу входа и помнит, куда вернуть", async () => {
     process.env.ADMIN_PASSWORD = envPassword();
-    const res = proxy(new NextRequest("http://localhost:3000/admin"));
-    expect(res.status).toBe(401);
+    const res = await proxy(new NextRequest("http://localhost:3000/admin/customers"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe(
+      "http://localhost:3000/login?next=%2Fadmin%2Fcustomers",
+    );
   });
 
   it("с паролем показывает двери зон хедера", async () => {
     const password = envPassword();
     process.env.ADMIN_PASSWORD = password;
     const auth = "Basic " + Buffer.from(`user:${password}`).toString("base64");
-    const res = proxy(
+    const res = await proxy(
       new NextRequest("http://localhost:3000/admin", { headers: { authorization: auth } }),
     );
     expect(res.status).toBe(200);

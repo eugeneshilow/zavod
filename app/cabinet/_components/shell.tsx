@@ -4,6 +4,7 @@ import { buttonVariants } from "@heroui/styles";
 import {
   BarChart3,
   CircleHelp,
+  LogOut,
   Clapperboard,
   Home,
   ListChecks,
@@ -62,6 +63,13 @@ export function Sidebar({ queued }: { queued?: number }) {
       >
         <CircleHelp className="size-4" aria-hidden />
         Помощь
+      </a>
+      <a
+        href="/logout"
+        className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted hover:bg-surface-secondary"
+      >
+        <LogOut className="size-4" aria-hidden />
+        Выйти
       </a>
       <div className="mt-3 flex items-center gap-2 px-3 text-xs text-muted">
         <Mark size={16} />

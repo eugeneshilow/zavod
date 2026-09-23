@@ -71,24 +71,25 @@ describe("хост кабинета", () => {
     expect(cabinetRewrite("/_next/static/x.js")).toBeNull();
   });
 
-  it("proxy: с хоста app. главная уезжает в кабинет, с основного — нет", () => {
+  it("proxy: с хоста app. главная уезжает в кабинет, с основного — нет", async () => {
     process.env.ADMIN_PASSWORD = "test-pass";
     const basic = `Basic ${btoa("owner:test-pass")}`;
-    const locked = proxy(
+    const locked = await proxy(
       new NextRequest("http://app.localhost:3400/", { headers: { host: "app.localhost:3400" } }),
     );
-    expect(locked.status).toBe(401);
-    const onApp = proxy(
+    expect(locked.status).toBe(307);
+    expect(locked.headers.get("location")).toContain("/login?next=%2F");
+    const onApp = await proxy(
       new NextRequest("http://app.localhost:3400/", {
         headers: { host: "app.localhost:3400", authorization: basic },
       }),
     );
     expect(onApp.headers.get("x-middleware-rewrite")).toContain("/cabinet");
-    const cabinetOnMain = proxy(
+    const cabinetOnMain = await proxy(
       new NextRequest("http://localhost:3400/cabinet/new", { headers: { host: "localhost:3400" } }),
     );
-    expect(cabinetOnMain.status).toBe(401);
-    const onMain = proxy(
+    expect(cabinetOnMain.status).toBe(307);
+    const onMain = await proxy(
       new NextRequest("http://localhost:3400/", { headers: { host: "localhost:3400" } }),
     );
     expect(onMain.headers.get("x-middleware-rewrite")).toBeNull();
