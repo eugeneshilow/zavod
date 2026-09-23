@@ -499,10 +499,7 @@ async function tick() {
   if (requeued > 0) log(`вернул зависших идей: ${requeued}`);
 
   const idea = await client.mutation(ideas.takeNext, { token, worker: RUNNER.worker });
-  if (!idea) {
-    log("идей в работе нет");
-    return;
-  }
+  if (!idea) return false;
   log(`взял идею ${idea.id}: ${idea.text.slice(0, 120).replace(/\s+/g, " ")}`);
   const startedAt = Date.now();
 
@@ -573,6 +570,10 @@ async function tick() {
     log(
       `идея ${idea.id} закрыта: ролик в очереди публикации · итого $${totalCostUsd.toFixed(2)} · ${Math.round(elapsedMs / 60000)} мин`,
     );
+    if (order)
+      await notifyOwner(
+        `Ролик готов: ${raw.title ?? id}. Кабинет: https://app.zavod.today/orders/${idea.id}`,
+      );
   } catch (error) {
     if (error instanceof Stopped) {
       log(`идея ${idea.id} остановлена руками: ${error.message}`);
@@ -655,7 +656,61 @@ async function main(argv) {
     // Предыдущий тик ещё работает — выходим молча, без строки в логе.
     return;
   }
-  await tick();
+  await watch();
+}
+
+/**
+ * Дежурство одного запуска: launchd будит раннер раз в десять минут, а внутри
+ * запуска он заглядывает в очередь каждые полминуты, пока не выйдет время.
+ * Заказ из кабинета поэтому ждёт робота меньше минуты, а не до десяти.
+ */
+export const WATCH = {
+  ms: Number(process.env.IDEA_RUNNER_WATCH_MS || 9 * 60 * 1000),
+  pollMs: Number(process.env.IDEA_RUNNER_POLL_MS || 30 * 1000),
+};
+
+async function watch() {
+  const until = Date.now() + WATCH.ms;
+  let took = 0;
+  while (Date.now() < until) {
+    const result = await tick();
+    if (result === false) {
+      if (Date.now() + WATCH.pollMs >= until) break;
+      await new Promise((resolve) => setTimeout(resolve, WATCH.pollMs));
+      continue;
+    }
+    took += 1;
+  }
+  if (took === 0) log("идей в работе нет");
+}
+
+/**
+ * Весточка владельцу в личку, когда ролик заказа готов: бот тот же, что у
+ * двери Telegram; без TELEGRAM_OWNER_CHAT_ID раннер молча пропускает.
+ */
+async function notifyOwner(text) {
+  let token = "";
+  let chatId = "";
+  try {
+    token = envValue("TELEGRAM_BOT_TOKEN") || "";
+    chatId = envValue("TELEGRAM_OWNER_CHAT_ID") || "";
+  } catch {
+    return;
+  }
+  if (!token || !chatId) {
+    log("весточка владельцу пропущена: нет TELEGRAM_OWNER_CHAT_ID");
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+    log(`весточка владельцу: ${res.ok ? "ушла" : `ошибка ${res.status}`}`);
+  } catch (error) {
+    log(`весточка владельцу не ушла: ${String(error.message || error).slice(0, 120)}`);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

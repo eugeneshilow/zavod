@@ -82,10 +82,13 @@ export function Header({
   title,
   subtitle,
   order = true,
+  ring = false,
 }: {
   title: string;
   subtitle?: string;
   order?: boolean;
+  /** Заказ готов за последние сутки — точка на колокольчике. */
+  ring?: boolean;
 }) {
   return (
     <header className="flex items-center gap-3">
@@ -96,8 +99,19 @@ export function Header({
       <Button variant="ghost" isIconOnly aria-label="Поиск">
         <Search className="size-4" aria-hidden />
       </Button>
-      <Button variant="ghost" isIconOnly aria-label="Уведомления">
+      <Button
+        variant="ghost"
+        isIconOnly
+        aria-label={ring ? "Уведомления: ролик готов" : "Уведомления"}
+        className="relative"
+      >
         <Bell className="size-4" aria-hidden />
+        {ring ? (
+          <span className="absolute right-2 top-2 flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent opacity-60" />
+            <span className="relative inline-flex size-2 rounded-full bg-accent" />
+          </span>
+        ) : null}
       </Button>
       {order ? (
         <Link href={ORDER_PATH} className={buttonVariants({ variant: "primary", size: "md" })}>
