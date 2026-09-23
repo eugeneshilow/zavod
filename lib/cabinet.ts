@@ -105,7 +105,7 @@ export function greeting(now: number, name: string): string {
 }
 
 export type RowStatus =
-  "live" | "rendering" | "queued" | "ready" | "publishing" | "failed" | "deleted";
+  "live" | "rendering" | "queued" | "ready" | "publishing" | "failed" | "cancelled" | "deleted";
 
 export const STATUS_LABEL: Record<RowStatus, string> = {
   live: "в эфире",
@@ -114,6 +114,7 @@ export const STATUS_LABEL: Record<RowStatus, string> = {
   ready: "собран",
   publishing: "ждёт эфира",
   failed: "ошибка",
+  cancelled: "отменён",
   deleted: "снят",
 };
 
@@ -173,13 +174,29 @@ export function ideaTitle(storyTitle: string | null, text: string): string {
   const fromStory = (storyTitle ?? "").trim();
   if (fromStory) return fromStory;
   const line = text
-    .replace(/https?:\/\/(www\.)?(\S+?)\/?(?=\s|$)/g, "$2")
+    .replace(/https?:\/\/(www\.)?(\S+?)\/?(?=\s|$)/g, (_m, _w, rest: string) =>
+      rest.length > 32 ? `${rest.split("/")[0]}/…` : rest,
+    )
     .replace(/\s+/g, " ")
     .trim();
   return clip(line || "Идея");
 }
 
+/** Заказ отменён кнопкой в кабинете: пометку ставит мутация `cancelOrder`. */
+export const CANCELLED_MARK = "отменён покупателем";
+
+export function isCancelled(idea: Idea): boolean {
+  return (idea.error ?? "") === CANCELLED_MARK;
+}
+
+/** Отменить можно, пока ролик не вышел везде: ждёт робота, делается или ждёт эфира. */
+export function isCancellable(idea: Idea): boolean {
+  if (idea.status === "new" || idea.status === "pending" || idea.status === "taken") return true;
+  return idea.status === "done" && idea.queueCount > 0;
+}
+
 export function ideaStatus(idea: Idea): RowStatus {
+  if (isCancelled(idea)) return "cancelled";
   if (idea.status === "failed") return "failed";
   if (idea.status === "taken") return "rendering";
   if (idea.status === "done") {
@@ -219,6 +236,8 @@ export type OrderView = {
   /** Путь закончен: ролик в эфире, скачан-готов или ошибка — обновлять незачем. */
   final: boolean;
   failed: boolean;
+  cancelled: boolean;
+  cancellable: boolean;
   videoUrl: string | null;
   permalink: string | null;
   current: OrderStep | null;
@@ -238,7 +257,8 @@ export function orderSteps(idea: Idea, permalink: string | null = null): OrderSt
   const phase = idea.phase;
   const taken = idea.status === "taken";
   const done = idea.status === "done";
-  const failed = idea.status === "failed";
+  const cancelled = isCancelled(idea);
+  const failed = idea.status === "failed" && !cancelled;
   const downloadOnly = idea.order ? idea.order.to.length === 0 : false;
   const failAt: OrderStep["key"] =
     phase === "render"
@@ -251,20 +271,22 @@ export function orderSteps(idea: Idea, permalink: string | null = null): OrderSt
   const st = (key: OrderStep["key"], passed: boolean, now: boolean): StepState => {
     if (failed && key === failAt) return "failed";
     if (passed) return "done";
+    if (cancelled) return "skip";
     if (now && !failed) return "now";
     return "next";
   };
   const afterStory = done || phase === "render" || phase === "publish";
   const afterRender = done || phase === "publish";
-  const air: StepState = downloadOnly
-    ? "skip"
-    : idea.posted
-      ? "done"
-      : done && idea.queueCount > 0
-        ? "now"
-        : done
-          ? "failed"
-          : "next";
+  const air: StepState =
+    downloadOnly || (cancelled && !idea.posted)
+      ? "skip"
+      : idea.posted
+        ? "done"
+        : done && idea.queueCount > 0
+          ? "now"
+          : done
+            ? "failed"
+            : "next";
   const queueAt = idea.queueAt ? moscowTime(idea.queueAt) : null;
   return [
     { key: "accepted", title: "Заказ принят", state: "done", at: idea.createdAt, note: "" },
@@ -298,12 +320,14 @@ export function orderSteps(idea: Idea, permalink: string | null = null): OrderSt
     },
     {
       key: "air",
-      title: "В эфире",
+      title: air === "now" ? "Ждёт эфира" : "В эфире",
       state: air,
       at: null,
       note:
         air === "skip"
-          ? "заказан «только скачать»"
+          ? cancelled
+            ? "отменено"
+            : "заказан «только скачать»"
           : idea.posted
             ? permalink
               ? "пост вышел"
@@ -332,9 +356,12 @@ export function orderView(idea: Idea, permalink: string | null = null): OrderVie
   const counted = steps.filter((s) => s.state !== "skip");
   const passed = counted.filter((s) => s.state === "done").length;
   const nowIndex = counted.findIndex((s) => s.state === "now");
-  const progress = Math.min(1, (passed + (nowIndex >= 0 ? 0.5 : 0)) / counted.length);
+  // Отменённый заказ показывает, докуда дошёл, а не пустые шаги как пройденные.
+  const total = isCancelled(idea) ? steps.length : counted.length;
+  const progress = Math.min(1, (passed + (nowIndex >= 0 ? 0.5 : 0)) / total);
   const failed = steps.some((s) => s.state === "failed");
-  const final = failed || counted.every((s) => s.state === "done");
+  const cancelled = isCancelled(idea);
+  const final = failed || cancelled || counted.every((s) => s.state === "done");
   const voiceName = idea.order
     ? (VOICES.find((v) => v.voice === idea.order?.voice)?.name ?? null)
     : null;
@@ -351,6 +378,8 @@ export function orderView(idea: Idea, permalink: string | null = null): OrderVie
     progress,
     final,
     failed,
+    cancelled,
+    cancellable: !cancelled && isCancellable(idea),
     videoUrl: idea.videoUrl,
     permalink,
     current:
