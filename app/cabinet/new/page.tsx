@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { Header } from "../_components/shell";
+import { parsePrefs, PREFS_COOKIE } from "@/lib/cabinet";
 import { OrderForm } from "@/components/cabinet/order-form";
 import { OrderPreview } from "@/components/cabinet/order-preview";
 
@@ -7,6 +9,7 @@ import { OrderPreview } from "@/components/cabinet/order-preview";
 export default async function CabinetNew({ searchParams }: PageProps<"/cabinet/new">) {
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : null;
+  const prefs = parsePrefs((await cookies()).get(PREFS_COOKIE)?.value);
   return (
     <>
       <Header
@@ -15,7 +18,7 @@ export default async function CabinetNew({ searchParams }: PageProps<"/cabinet/n
         order={false}
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <OrderForm error={error} />
+        <OrderForm error={error} prefs={prefs} />
         <OrderPreview />
       </div>
     </>

@@ -97,6 +97,8 @@ const ideaWithQueueValidator = v.object({
   posted: v.boolean(),
   /** Медиа вышедшего ролика: по нему строка эфира узнаёт свою идею. */
   postedMediaId: v.union(v.string(), v.null()),
+  /** Ссылки на вышедшие посты по дверям — кабинет показывает их сразу, до сбора метрик. */
+  postedLinks: v.array(v.object({ channel: v.string(), permalink: v.string() })),
   /** Сколько строк очереди ещё ждут выхода — столько дверей у ролика. */
   queueCount: v.number(),
   /** Когда эти строки собираются выйти: самое раннее плановое время. */
@@ -219,6 +221,7 @@ export const listForAdmin = query({
     for (const row of rows) {
       let posted = false;
       let postedMediaId: string | null = null;
+      const postedLinks: { channel: string; permalink: string }[] = [];
       let queueCount = 0;
       let queueAt: number | null = null;
       for (const raw of row.queueIds ?? []) {
@@ -229,6 +232,12 @@ export const listForAdmin = query({
         if (queued.status === "posted") {
           posted = true;
           postedMediaId = queued.mediaId ?? postedMediaId;
+          if (queued.permalink) {
+            postedLinks.push({
+              channel: queued.channel ?? "instagram",
+              permalink: queued.permalink,
+            });
+          }
           continue;
         }
         if (!CANCELLABLE.includes(queued.status) && queued.status !== "posting") continue;
@@ -241,6 +250,7 @@ export const listForAdmin = query({
         videoUrl: row.storageId ? await ctx.storage.getUrl(row.storageId) : null,
         posted,
         postedMediaId,
+        postedLinks,
         queueCount,
         queueAt,
       });

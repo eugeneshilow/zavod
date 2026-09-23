@@ -80,7 +80,6 @@ export const CABINET_NAV = [
 export const CABINET_TABS = [
   { href: CABINET_PATH, label: "Обзор" },
   { href: `${CABINET_PATH}/reels`, label: "Ролики" },
-  { href: `${CABINET_PATH}/payments`, label: "Платежи" },
 ] as const;
 
 const MSK = "Europe/Moscow";
@@ -129,6 +128,8 @@ export type CabinetRow = {
   videoUrl: string | null;
   /** Строка идеи или заказа: ведёт на страницу заказа с шагами. */
   orderHref: string | null;
+  /** Прирост просмотров за сутки; у строк без метрик — null. */
+  delta24: number | null;
 };
 
 export type CabinetData = {
@@ -143,7 +144,104 @@ export type CabinetData = {
   active: OrderView[];
   /** Заказ готов за последние сутки — точка на колокольчике. */
   fresh: boolean;
+  /** События заказов за три дня — список под колокольчиком, новые сверху. */
+  events: CabinetEvent[];
 };
+
+export type CabinetEvent = {
+  id: string;
+  href: string;
+  title: string;
+  what: string;
+  at: number;
+  tone: "good" | "wait" | "bad" | "off";
+};
+
+/** Что случилось с заказом последним — строка под колокольчиком. */
+export function orderEvent(idea: Idea): CabinetEvent {
+  const base = {
+    id: idea.id,
+    href: `${ORDER_BASE}/${idea.id}`,
+    title: ideaTitle(idea.storyTitle, idea.text),
+  };
+  if (isCancelled(idea)) return { ...base, what: "заказ отменён", at: idea.createdAt, tone: "off" };
+  if (idea.status === "failed")
+    return { ...base, what: "не вышло", at: idea.phaseAt ?? idea.createdAt, tone: "bad" };
+  if (idea.posted)
+    return { ...base, what: "вышел в эфир", at: idea.doneAt ?? idea.createdAt, tone: "good" };
+  if (idea.status === "done")
+    return { ...base, what: "ролик готов", at: idea.doneAt ?? idea.createdAt, tone: "good" };
+  if (idea.status === "taken")
+    return {
+      ...base,
+      what: "делается",
+      at: idea.phaseAt ?? idea.takenAt ?? idea.createdAt,
+      tone: "wait",
+    };
+  return { ...base, what: "заказ принят", at: idea.createdAt, tone: "wait" };
+}
+
+/** Ссылки на вышедшие посты словами покупателя: «Площадка», «Telegram». */
+export function postLinks(
+  idea: Idea,
+  permalink: string | null = null,
+): { label: string; href: string }[] {
+  const out: { label: string; href: string }[] = [];
+  for (const link of idea.postedLinks ?? []) {
+    out.push({
+      label: link.channel === "telegram" ? "Telegram" : "Площадка",
+      href: link.permalink,
+    });
+  }
+  if (permalink && !out.some((l) => l.href === permalink))
+    out.unshift({ label: "Площадка", href: permalink });
+  return out;
+}
+
+export type ReelsFilter = "all" | "work" | "live" | "off";
+
+export const REELS_FILTERS: { id: ReelsFilter; label: string }[] = [
+  { id: "all", label: "Все" },
+  { id: "work", label: "В работе" },
+  { id: "live", label: "В эфире" },
+  { id: "off", label: "Сняты и отменены" },
+];
+
+/** Фильтр экрана «Ролики» по статусу строки. */
+export function filterRows(rows: CabinetRow[], filter: ReelsFilter): CabinetRow[] {
+  if (filter === "work")
+    return rows.filter((r) => ["queued", "rendering", "ready", "publishing"].includes(r.status));
+  if (filter === "live") return rows.filter((r) => r.status === "live");
+  if (filter === "off")
+    return rows.filter((r) => ["deleted", "cancelled", "failed"].includes(r.status));
+  return rows;
+}
+
+// ---------------------------------------------------------------- настройки
+
+export const PREFS_COOKIE = "zavod_prefs";
+
+export type Prefs = { voice: string; to: string[] };
+
+/** Настройки покупателя по умолчанию: голос канала и обе площадки. */
+export const DEFAULT_PREFS: Prefs = { voice: "stanislav", to: ["reels", "telegram"] };
+
+/** Настройки из куки; чужое и битое — умолчание. До входа живут в браузере. */
+export function parsePrefs(raw: string | undefined | null): Prefs {
+  if (!raw) return DEFAULT_PREFS;
+  try {
+    const value = JSON.parse(decodeURIComponent(raw)) as Partial<Prefs>;
+    const voice = VOICES.some((v) => v.id === value.voice)
+      ? String(value.voice)
+      : DEFAULT_PREFS.voice;
+    const to = Array.isArray(value.to)
+      ? value.to.filter((d) => DESTINATIONS.some((x) => x.id === d))
+      : DEFAULT_PREFS.to;
+    return { voice, to };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
 
 /** Заголовок ролика: название сюжета, иначе первая строка подписи без ссылок и хэштегов. */
 export function reelTitle(storyTitle: string | null, caption: string): string {
@@ -240,6 +338,7 @@ export type OrderView = {
   cancellable: boolean;
   videoUrl: string | null;
   permalink: string | null;
+  links: { label: string; href: string }[];
   current: OrderStep | null;
 };
 
@@ -382,6 +481,7 @@ export function orderView(idea: Idea, permalink: string | null = null): OrderVie
     cancellable: !cancelled && isCancellable(idea),
     videoUrl: idea.videoUrl,
     permalink,
+    links: postLinks(idea, permalink),
     current:
       steps.find((s) => s.state === "failed") ?? steps.find((s) => s.state === "now") ?? null,
   };
@@ -405,8 +505,9 @@ export function composeCabinet(
       views: reel.views,
       at: reel.postedAt,
       permalink: reel.permalink,
-      videoUrl: reel.videoUrl,
+      videoUrl: reel.videoUrl ?? idea?.videoUrl ?? null,
       orderHref: idea ? `${ORDER_BASE}/${idea.id}` : null,
+      delta24: reel.delta24,
     };
   };
   const pending = input.ideas
@@ -422,12 +523,30 @@ export function composeCabinet(
       permalink: null,
       videoUrl: idea.videoUrl,
       orderHref: `${ORDER_BASE}/${idea.id}`,
+      delta24: null,
+    }));
+  // Вышедший заказ, которого ещё нет в эфире сети (метрики снимаются раз в
+  // час): строка «в эфире» со ссылкой на пост сразу, без просмотров.
+  const known = new Set([...air.reels, ...air.deleted].map((r) => r.mediaId));
+  const fresh = input.ideas
+    .filter((idea) => idea.posted && !(idea.postedMediaId && known.has(idea.postedMediaId)))
+    .map<CabinetRow>((idea) => ({
+      id: idea.id,
+      title: ideaTitle(idea.storyTitle, idea.text),
+      source: ideaHost(idea.text) ?? "идея",
+      status: "live",
+      views: null,
+      at: idea.doneAt ?? idea.createdAt,
+      permalink: postLinks(idea)[0]?.href ?? null,
+      videoUrl: idea.videoUrl,
+      orderHref: `${ORDER_BASE}/${idea.id}`,
+      delta24: null,
     }));
   const live = [...air.reels]
     .sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0))
     .map((r) => rowOfReel(r, "live"));
   const deleted = air.deleted.map((r) => rowOfReel(r, "deleted"));
-  const rows = [...pending, ...live, ...deleted];
+  const rows = [...pending, ...fresh, ...live, ...deleted];
   const queued = pending.filter((r) => r.status === "queued" || r.status === "rendering").length;
   const posted = [...air.reels, ...air.deleted];
   const days = Array.from({ length: 14 }, (_, i) => {
@@ -442,13 +561,14 @@ export function composeCabinet(
   const today = dayKey(now);
   const orders = input.ideas.filter((idea) => idea.order);
   const active = orders
+    // Сверху — только заказы в пути: ждут робота, делаются или ждут эфира.
+    // Вышедший, отменённый и сломанный уходят в таблицу и под колокольчик.
     .filter(
       (idea) =>
-        idea.status === "new" ||
-        idea.status === "taken" ||
-        (idea.status === "done" && !idea.posted && idea.queueCount > 0) ||
-        ((idea.status === "done" || idea.status === "failed") &&
-          (idea.doneAt ?? idea.createdAt) >= now - 2 * 60 * 60 * 1000),
+        !isCancelled(idea) &&
+        (idea.status === "new" ||
+          idea.status === "taken" ||
+          (idea.status === "done" && !idea.posted && idea.queueCount > 0)),
     )
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 3)
@@ -456,7 +576,12 @@ export function composeCabinet(
   return {
     customer: DEMO_CUSTOMER,
     now,
-    stats: { live: air.reels.length, views7d: air.views7d, queued, total: posted.length },
+    stats: {
+      live: air.reels.length + fresh.length,
+      views7d: air.views7d,
+      queued,
+      total: posted.length + fresh.length,
+    },
     week: {
       posts7d: posted.filter((r) => (r.postedAt ?? 0) >= now - 7 * DAY).length,
       postsToday: posted.filter((r) => r.postedAt !== null && dayKey(r.postedAt) === today).length,
@@ -472,6 +597,11 @@ export function composeCabinet(
     rows,
     active,
     fresh: orders.some((idea) => idea.status === "done" && (idea.doneAt ?? 0) >= now - DAY),
+    events: orders
+      .map(orderEvent)
+      .filter((e) => e.at >= now - 3 * DAY)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 8),
   };
 }
 

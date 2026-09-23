@@ -107,6 +107,8 @@ export type Idea = {
   queueCount: number;
   queueAt: number | null;
   error: string | null;
+  /** Ссылки на вышедшие посты по дверям; у старых строк и в тестах может не быть. */
+  postedLinks?: { channel: string; permalink: string }[];
   /** Когда ролик собран; у старых строк нет. */
   doneAt?: number | null;
   /** Заказ из кабинета: голос, двери, пожелание. Идея владельца — без него. */

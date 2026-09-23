@@ -15,6 +15,10 @@ import {
   orderSteps,
   orderView,
   isCancellable,
+  filterRows,
+  parsePrefs,
+  orderEvent,
+  DEFAULT_PREFS,
   VOICES,
   parseOrder,
   DESTINATIONS,
@@ -28,6 +32,7 @@ import { ORDER_VOICES } from "@/convex/tables/ops_reel_ideas";
 
 vi.mock("@/app/cabinet/new/actions", () => ({ orderReel: async () => {} }));
 vi.mock("@/app/cabinet/orders/actions", () => ({ cancelOrder: async () => {} }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ refresh: () => {} }),
@@ -427,5 +432,71 @@ describe("отмена заказа", () => {
     expect(
       ideaTitle(null, "Юзкейсы Джева https://x.com/rakshaa_t/status/2101950814545961082"),
     ).toBe("Юзкейсы Джева x.com/…");
+  });
+});
+
+describe("кабинет как у сервиса", () => {
+  const order = { voice: "eleven:ogi2DyUAKJb7CEdqqvlU", to: ["telegram"], source: "cabinet" };
+
+  it("сверху только заказы в пути: вышедший и отменённый уходят вниз", () => {
+    const data = composeCabinet(
+      {
+        airtime: [],
+        ideas: [
+          idea({ id: "p1", order }),
+          idea({
+            id: "p2",
+            status: "done",
+            doneAt: now,
+            posted: true,
+            order,
+            postedLinks: [{ channel: "telegram", permalink: "https://t.me/autovibecoding/11" }],
+          }),
+          idea({ id: "p3", status: "failed", error: "отменён покупателем", order }),
+          idea({ id: "p4", status: "done", doneAt: now, queueCount: 2, order }),
+        ],
+      },
+      now,
+    );
+    expect(data.active.map((o) => o.id)).toEqual(["p1", "p4"]);
+    const posted = data.rows.find((r) => r.id === "p2");
+    expect(posted).toMatchObject({ status: "live", permalink: "https://t.me/autovibecoding/11" });
+    expect(data.stats.live).toBe(1);
+    expect(data.events.map((e) => e.what)).toContain("вышел в эфир");
+  });
+
+  it("событие заказа словами покупателя", () => {
+    expect(orderEvent(idea({ id: "e1", order })).what).toBe("заказ принят");
+    expect(
+      orderEvent(idea({ id: "e2", status: "failed", error: "отменён покупателем" })).tone,
+    ).toBe("off");
+  });
+
+  it("фильтр роликов по статусу", () => {
+    const rows = composeCabinet(
+      {
+        airtime: [air({ mediaId: "m1" })],
+        ideas: [
+          idea({ id: "f1" }),
+          idea({ id: "f2", status: "failed", error: "отменён покупателем" }),
+        ],
+      },
+      now,
+    ).rows;
+    expect(filterRows(rows, "live").map((r) => r.id)).toEqual(["m1"]);
+    expect(filterRows(rows, "work").map((r) => r.id)).toEqual(["f1"]);
+    expect(filterRows(rows, "off").map((r) => r.id)).toEqual(["f2"]);
+    expect(filterRows(rows, "all")).toHaveLength(3);
+  });
+
+  it("настройки из куки: своё — берём, чужое и битое — умолчание", () => {
+    expect(
+      parsePrefs(encodeURIComponent(JSON.stringify({ voice: "egor", to: ["telegram", "x"] }))),
+    ).toEqual({
+      voice: "egor",
+      to: ["telegram"],
+    });
+    expect(parsePrefs("не json")).toEqual(DEFAULT_PREFS);
+    expect(parsePrefs(undefined)).toEqual(DEFAULT_PREFS);
   });
 });

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button, Card, Chip } from "@heroui/react";
 import { Download, ExternalLink } from "lucide-react";
 import { moscow } from "@/lib/reels";
+import { ReelThumb } from "./reel-thumb";
 import { fmt, STATUS_LABEL, type CabinetRow, type RowStatus } from "@/lib/cabinet";
 
 const CHIP: Record<
@@ -19,7 +20,16 @@ const CHIP: Record<
 };
 
 /** Таблица роликов — блок 6 канона. */
-export function ReelsTable({ rows, title = "Все ролики" }: { rows: CabinetRow[]; title?: string }) {
+export function ReelsTable({
+  rows,
+  title = "Все ролики",
+  more,
+}: {
+  rows: CabinetRow[];
+  title?: string;
+  /** Ссылка «все ролики» справа от заголовка, если таблица показывает часть. */
+  more?: { href: string; label: string };
+}) {
   return (
     <Card>
       <Card.Header className="flex-row items-center gap-2">
@@ -27,6 +37,11 @@ export function ReelsTable({ rows, title = "Все ролики" }: { rows: Cabi
         <span className="rounded-md bg-surface-secondary px-1.5 text-xs text-muted">
           {rows.length}
         </span>
+        {more ? (
+          <Link href={more.href} className="ml-auto text-sm text-muted hover:text-foreground">
+            {more.label}
+          </Link>
+        ) : null}
       </Card.Header>
       <Card.Content>
         {rows.length === 0 ? (
@@ -46,10 +61,7 @@ export function ReelsTable({ rows, title = "Все ролики" }: { rows: Cabi
                 <tr key={row.id} className="border-t border-border">
                   <td className="py-2.5 pr-3">
                     <div className="flex items-center gap-3">
-                      <span
-                        className={`h-9 w-6 shrink-0 rounded-md ${row.status === "live" ? "bg-accent" : "border border-border bg-surface-secondary"}`}
-                        aria-hidden
-                      />
+                      <ReelThumb src={row.videoUrl} live={row.status === "live"} />
                       <div className="min-w-0">
                         {row.orderHref ? (
                           <Link

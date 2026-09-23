@@ -1,20 +1,18 @@
 import Link from "next/link";
-import { Avatar, Button } from "@heroui/react";
+import { Avatar } from "@heroui/react";
 import { buttonVariants } from "@heroui/styles";
 import {
   BarChart3,
-  Bell,
   CircleHelp,
   Clapperboard,
   Home,
   ListChecks,
-  LogOut,
   Plus,
-  Search,
   Settings,
 } from "lucide-react";
 import { Mark } from "@/components/brand/logo";
-import { CABINET_NAV, DEMO_CUSTOMER, ORDER_PATH } from "@/lib/cabinet";
+import { Bell } from "@/components/cabinet/bell";
+import { CABINET_NAV, DEMO_CUSTOMER, ORDER_PATH, type CabinetEvent } from "@/lib/cabinet";
 
 const ICON = {
   home: Home,
@@ -65,10 +63,6 @@ export function Sidebar({ queued }: { queued?: number }) {
         <CircleHelp className="size-4" aria-hidden />
         Помощь
       </a>
-      <span className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted">
-        <LogOut className="size-4" aria-hidden />
-        Выйти
-      </span>
       <div className="mt-3 flex items-center gap-2 px-3 text-xs text-muted">
         <Mark size={16} />
         zavod.today
@@ -77,18 +71,20 @@ export function Sidebar({ queued }: { queued?: number }) {
   );
 }
 
-/** Шапка — блок 2 канона: приветствие, поиск, звонок, одна кнопка на экран заказа. */
+/** Шапка — блок 2 канона: заголовок, колокольчик с событиями, одна кнопка заказа. */
 export function Header({
   title,
   subtitle,
   order = true,
   ring = false,
+  events = [],
 }: {
   title: string;
   subtitle?: string;
   order?: boolean;
   /** Заказ готов за последние сутки — точка на колокольчике. */
   ring?: boolean;
+  events?: CabinetEvent[];
 }) {
   return (
     <header className="flex items-center gap-3">
@@ -96,23 +92,7 @@ export function Header({
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {subtitle ? <p className="text-sm text-muted">{subtitle}</p> : null}
       </div>
-      <Button variant="ghost" isIconOnly aria-label="Поиск">
-        <Search className="size-4" aria-hidden />
-      </Button>
-      <Button
-        variant="ghost"
-        isIconOnly
-        aria-label={ring ? "Уведомления: ролик готов" : "Уведомления"}
-        className="relative"
-      >
-        <Bell className="size-4" aria-hidden />
-        {ring ? (
-          <span className="absolute right-2 top-2 flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-accent" />
-          </span>
-        ) : null}
-      </Button>
+      <Bell events={events} ring={ring} />
       {order ? (
         <Link href={ORDER_PATH} className={buttonVariants({ variant: "primary", size: "md" })}>
           <Plus className="size-4" aria-hidden />

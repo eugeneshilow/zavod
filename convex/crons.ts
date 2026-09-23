@@ -17,7 +17,7 @@ if (process.env.INSTAGRAM_CRONS_ENABLED === "true") {
   );
   crons.interval(
     "instagram-collect-metrics",
-    { hours: 6 },
+    { hours: 1 },
     internal.workflows.instagram_publishing.collectMetrics,
     {},
   );

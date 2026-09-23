@@ -23,7 +23,11 @@ export default async function CabinetHome() {
   }
   return (
     <>
-      <Header title={greeting(data.now, data.customer.name)} ring={data.fresh} />
+      <Header
+        title={greeting(data.now, data.customer.name)}
+        ring={data.fresh}
+        events={data.events}
+      />
       <Tabs active={CABINET_PATH} />
       <AutoRefresh everyMs={8000} active={data.active.some((o) => !o.final)} />
       <ActiveOrders orders={data.active} />
@@ -45,7 +49,11 @@ export default async function CabinetHome() {
         <ReleaseBars data={data} />
         <TopReels data={data} />
       </section>
-      <ReelsTable rows={data.rows.slice(0, 12)} />
+      <ReelsTable
+        title="Последние ролики"
+        rows={data.rows.slice(0, 8)}
+        more={{ href: `${CABINET_PATH}/reels`, label: "Все ролики" }}
+      />
     </>
   );
 }

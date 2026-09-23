@@ -216,16 +216,17 @@ function ResultCard({ view }: { view: OrderView }) {
                 >
                   <Download className="size-4" aria-hidden /> Скачать
                 </a>
-                {view.permalink ? (
+                {view.links.map((link) => (
                   <a
-                    href={view.permalink}
+                    key={link.href}
+                    href={link.href}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm"
                   >
-                    <ExternalLink className="size-4" aria-hidden /> Пост
+                    <ExternalLink className="size-4" aria-hidden /> {link.label}
                   </a>
-                ) : null}
+                ))}
               </div>
             </motion.div>
           ) : (
