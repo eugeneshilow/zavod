@@ -62,7 +62,10 @@ export function cabinetBlocks(readme: string): CabinetBlock[] {
 /** Что собрано в коде, в порядке канона. Тест сверяет с `cabinetBlocks`. */
 export const BUILT_BLOCKS: BlockSlug[] = ["menu", "header", "tabs", "stats", "charts", "reels"];
 
-/** До входа и кассы покупатель один — демо-аккаунт завода. */
+/**
+ * До входа покупатель один — демо-аккаунт завода. `plan` — имя тарифа в
+ * подписи формы заказа; живой тариф считается из платежей (lib/payments.ts).
+ */
 export const DEMO_CUSTOMER = {
   name: "Евгений",
   initials: "ЕШ",
@@ -75,6 +78,7 @@ export const CABINET_NAV = [
   { href: `${CABINET_PATH}/reels`, label: "Ролики", icon: "film" },
   { href: `${CABINET_PATH}/queue`, label: "Очередь", icon: "list" },
   { href: `${CABINET_PATH}/views`, label: "Просмотры", icon: "chart" },
+  { href: `${CABINET_PATH}/tariff`, label: "Тариф", icon: "card" },
   { href: `${CABINET_PATH}/settings`, label: "Настройки", icon: "settings" },
 ] as const;
 

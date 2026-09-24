@@ -3,6 +3,14 @@ import type { FunctionReturnType } from "convex/server";
 import { reelsAccess } from "@/lib/reels";
 import { DEMO_CUSTOMER, ideaTitle, isCancelled, ORDER_BASE } from "@/lib/cabinet";
 import type { Idea } from "@/lib/social";
+import {
+  loadAllPayments,
+  paidThisMonthRub,
+  productTitle,
+  rub,
+  tariffOf,
+  type PaymentRow,
+} from "@/lib/payments";
 
 // Переносчик зоны клиентов: стадии, сборка человека из фактов, «что дальше».
 // Канон — docs/customers/README.md; экран — /admin/customers.
@@ -40,6 +48,9 @@ export type Customer = {
   cancelled: number;
   paidRub: number;
   payments: number;
+  /** Тариф жив до этой даты, либо кончился в неё; оплат месяца нет — null. */
+  tariffUntil: number | null;
+  tariffAlive: boolean;
   lastTouchAt: number;
   touches: Touch[];
   next: string;
@@ -62,8 +73,8 @@ export function initials(name: string): string {
 }
 
 /**
- * Стадия по фактам. Оплат до кассы нет, поэтому «клиент» и «ушёл» появятся
- * вместе с ней: сейчас человек либо заявка, либо пробует.
+ * Стадия по фактам: оплаты и тариф — из платежей кассы
+ * (docs/payments/README.md), заказы — из идей кабинета.
  */
 export function stageOf(facts: {
   orders: number;
@@ -112,6 +123,17 @@ function orderTouches(ideas: Idea[]): Touch[] {
   return out.sort((a, b) => b.at - a.at);
 }
 
+/** Касание «оплатил» — только оплаченные строки кассы. */
+function paymentTouches(payments: PaymentRow[]): Touch[] {
+  return payments
+    .filter((p) => p.status === "succeeded")
+    .map((p) => ({
+      at: p.paidAt ?? p.createdAt,
+      what: `оплатил «${productTitle(p.product)}» · ${rub(p.amountRub)}`,
+      href: "/cabinet/tariff",
+    }));
+}
+
 function build(
   base: Omit<
     Customer,
@@ -121,22 +143,28 @@ function build(
     | "cancelled"
     | "paidRub"
     | "payments"
+    | "tariffUntil"
+    | "tariffAlive"
     | "lastTouchAt"
     | "touches"
     | "next"
     | "initials"
   >,
   ideas: Idea[],
+  payments: PaymentRow[],
   now: number,
 ): Customer {
   const touches = [
     ...orderTouches(ideas),
+    ...paymentTouches(payments),
     { at: base.createdAt, what: `пришёл: ${base.source}`, href: null },
   ].sort((a, b) => b.at - a.at);
   const orders = ideas.length;
   const live = ideas.filter((i) => i.posted).length;
   const cancelled = ideas.filter(isCancelled).length;
-  const stage = stageOf({ orders, payments: 0, tariffAlive: false });
+  const paid = payments.filter((p) => p.status === "succeeded");
+  const tariff = tariffOf(payments, now);
+  const stage = stageOf({ orders, payments: paid.length, tariffAlive: tariff.alive });
   const lastTouchAt = touches[0]?.at ?? base.createdAt;
   const c = {
     ...base,
@@ -145,8 +173,10 @@ function build(
     orders,
     live,
     cancelled,
-    paidRub: 0,
-    payments: 0,
+    paidRub: paid.reduce((sum, p) => sum + p.amountRub, 0),
+    payments: paid.length,
+    tariffUntil: tariff.until,
+    tariffAlive: tariff.alive,
     lastTouchAt,
     touches,
   };
@@ -154,14 +184,16 @@ function build(
 }
 
 /**
- * Клиенты из таблицы плюс демо-аккаунт кабинета: заказы кабинета пока не
- * знают покупателя, до входа они все принадлежат демо-аккаунту.
+ * Клиенты из таблицы плюс демо-аккаунт кабинета: заказы и платежи кабинета
+ * пока не знают покупателя, до входа они все принадлежат демо-аккаунту.
  */
 export function composeCustomers(
-  input: { stored: StoredCustomer[]; ideas: Idea[] },
+  input: { stored: StoredCustomer[]; ideas: Idea[]; payments?: PaymentRow[] },
   now: number,
 ): CustomersView {
   const cabinetOrders = input.ideas.filter((i) => i.order?.source === "cabinet");
+  const payments = input.payments ?? [];
+  const demoPayments = payments.filter((p) => p.account === DEMO_CUSTOMER.account);
   const customers: Customer[] = input.stored.map((s) =>
     build(
       {
@@ -175,11 +207,15 @@ export function composeCustomers(
         demo: false,
       },
       [],
+      [],
       now,
     ),
   );
-  if (cabinetOrders.length > 0) {
-    const first = Math.min(...cabinetOrders.map((i) => i.createdAt));
+  if (cabinetOrders.length > 0 || demoPayments.length > 0) {
+    const first = Math.min(
+      ...cabinetOrders.map((i) => i.createdAt),
+      ...demoPayments.map((p) => p.createdAt),
+    );
     customers.push(
       build(
         {
@@ -188,11 +224,12 @@ export function composeCustomers(
           email: null,
           telegram: null,
           source: "кабинет",
-          note: "все заказы кабинета до входа по почте",
+          note: "все заказы и платежи кабинета до входа по почте",
           createdAt: first,
           demo: true,
         },
         cabinetOrders,
+        demoPayments,
         now,
       ),
     );
@@ -206,7 +243,7 @@ export function composeCustomers(
     totals: {
       all: customers.length,
       paying: byStage.client,
-      paidMonthRub: 0,
+      paidMonthRub: paidThisMonthRub(payments, now),
       waiting: customers.filter((c) => c.stage === "lead").length,
     },
   };
@@ -217,11 +254,13 @@ export async function loadCustomers(now = Date.now()): Promise<CustomersView | {
   if ("reason" in access) return access;
   const { client, token } = access;
   try {
-    const [stored, ideas] = await Promise.all([
+    const [stored, ideas, payments] = await Promise.all([
       client.query(api.tables.biz_customers.listForAdmin, { token }),
       client.query(api.tables.ops_reel_ideas.listForAdmin, { token, limit: 50 }),
+      loadAllPayments(),
     ]);
-    return composeCustomers({ stored, ideas }, now);
+    if ("reason" in payments) return payments;
+    return composeCustomers({ stored, ideas, payments }, now);
   } catch (error) {
     return { reason: error instanceof Error ? error.message : String(error) };
   }

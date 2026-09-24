@@ -3,6 +3,7 @@ import { Avatar, Card } from "@heroui/react";
 import { Header } from "../_components/shell";
 import { savePrefs } from "./actions";
 import { DEMO_CUSTOMER, DESTINATIONS, parsePrefs, PREFS_COOKIE, VOICES } from "@/lib/cabinet";
+import { loadAccountPayments, tariffLine, tariffOf } from "@/lib/payments";
 
 // Экран «Настройки»: профиль и то, с чем открывается форма заказа. Канон —
 // docs/cabinet/README.md, «Настройки».
@@ -10,6 +11,8 @@ import { DEMO_CUSTOMER, DESTINATIONS, parsePrefs, PREFS_COOKIE, VOICES } from "@
 export default async function CabinetSettings({ searchParams }: PageProps<"/cabinet/settings">) {
   const params = await searchParams;
   const prefs = parsePrefs((await cookies()).get(PREFS_COOKIE)?.value);
+  const payments = await loadAccountPayments(DEMO_CUSTOMER.account);
+  const plan = "reason" in payments ? null : tariffLine(tariffOf(payments));
   return (
     <>
       <Header title="Настройки" />
@@ -25,7 +28,7 @@ export default async function CabinetSettings({ searchParams }: PageProps<"/cabi
               </Avatar>
               <div>
                 <p className="font-medium">{DEMO_CUSTOMER.name}</p>
-                <p className="text-sm text-muted">Тариф «{DEMO_CUSTOMER.plan}»</p>
+                {plan ? <p className="text-sm text-muted">{plan}</p> : null}
               </div>
             </div>
             <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">

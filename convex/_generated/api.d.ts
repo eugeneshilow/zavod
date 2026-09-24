@@ -16,6 +16,7 @@ import type * as services_instagram from "../services/instagram.js";
 import type * as services_reels_queue from "../services/reels_queue.js";
 import type * as services_telegram from "../services/telegram.js";
 import type * as tables_biz_customers from "../tables/biz_customers.js";
+import type * as tables_biz_payments from "../tables/biz_payments.js";
 import type * as tables_data_cooked_instagram_reels from "../tables/data_cooked_instagram_reels.js";
 import type * as tables_data_raw_instagram_media from "../tables/data_raw_instagram_media.js";
 import type * as tables_data_raw_instagram_metrics from "../tables/data_raw_instagram_metrics.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   "services/reels_queue": typeof services_reels_queue;
   "services/telegram": typeof services_telegram;
   "tables/biz_customers": typeof tables_biz_customers;
+  "tables/biz_payments": typeof tables_biz_payments;
   "tables/data_cooked_instagram_reels": typeof tables_data_cooked_instagram_reels;
   "tables/data_raw_instagram_media": typeof tables_data_raw_instagram_media;
   "tables/data_raw_instagram_metrics": typeof tables_data_raw_instagram_metrics;

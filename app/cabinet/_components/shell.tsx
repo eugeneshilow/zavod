@@ -6,6 +6,7 @@ import {
   CircleHelp,
   LogOut,
   Clapperboard,
+  CreditCard,
   Home,
   ListChecks,
   Plus,
@@ -14,17 +15,27 @@ import {
 import { Mark } from "@/components/brand/logo";
 import { Bell } from "@/components/cabinet/bell";
 import { CABINET_NAV, DEMO_CUSTOMER, ORDER_PATH, type CabinetEvent } from "@/lib/cabinet";
+import { loadAccountPayments, TARIFF_PLAN, tariffOf } from "@/lib/payments";
 
 const ICON = {
   home: Home,
   film: Clapperboard,
   list: ListChecks,
   chart: BarChart3,
+  card: CreditCard,
   settings: Settings,
 } as const;
 
+/** Тариф под именем: считается из платежей (docs/payments/README.md). */
+async function planLine(): Promise<string | null> {
+  const payments = await loadAccountPayments(DEMO_CUSTOMER.account);
+  if ("reason" in payments) return null;
+  return tariffOf(payments).alive ? `Тариф «${TARIFF_PLAN}»` : "Тарифа нет";
+}
+
 /** Меню слева — блок 1 канона. */
-export function Sidebar({ queued }: { queued?: number }) {
+export async function Sidebar({ queued }: { queued?: number }) {
+  const plan = await planLine();
   return (
     <aside className="flex w-[232px] shrink-0 flex-col gap-1 rounded-2xl border border-border bg-surface p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -33,7 +44,7 @@ export function Sidebar({ queued }: { queued?: number }) {
         </Avatar>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{DEMO_CUSTOMER.name}</p>
-          <p className="text-xs text-muted">Тариф «{DEMO_CUSTOMER.plan}»</p>
+          {plan ? <p className="text-xs text-muted">{plan}</p> : null}
         </div>
       </div>
       <nav className="flex flex-col gap-1" aria-label="Кабинет">
