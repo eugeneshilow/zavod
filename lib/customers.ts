@@ -25,8 +25,8 @@ export const SOURCES = ["витрина", "telegram", "реферал", "рук�
 export const STAGES = [
   { id: "lead", label: "заявка", note: "оставил контакт, роликов нет" },
   { id: "trial", label: "пробует", note: "есть ролик, нет оплаты" },
-  { id: "client", label: "клиент", note: "есть оплата, тариф жив" },
-  { id: "gone", label: "ушёл", note: "тариф не продлён" },
+  { id: "client", label: "клиент", note: "оплата за 30 дней или живой тариф" },
+  { id: "gone", label: "ушёл", note: "оплата старше 30 дней, тарифа нет" },
 ] as const;
 
 export type StageId = (typeof STAGES)[number]["id"];
@@ -164,7 +164,7 @@ function build(
   const cancelled = ideas.filter(isCancelled).length;
   const paid = payments.filter((p) => p.status === "succeeded");
   const tariff = tariffOf(payments, now);
-  const stage = stageOf({ orders, payments: paid.length, tariffAlive: tariff.alive });
+  const stage = stageOf({ orders, payments: paid.length, tariffAlive: tariff.active });
   const lastTouchAt = touches[0]?.at ?? base.createdAt;
   const c = {
     ...base,

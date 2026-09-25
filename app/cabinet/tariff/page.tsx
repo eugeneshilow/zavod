@@ -92,7 +92,7 @@ export default async function CabinetTariff({ searchParams }: PageProps<"/cabine
               {rows.map((p) => (
                 <li
                   key={p.id}
-                  className="grid grid-cols-[110px_minmax(0,1fr)_90px_80px_40px] items-center gap-3 py-2.5 text-sm"
+                  className="grid grid-cols-[96px_minmax(0,1fr)_76px_72px_32px] items-center gap-2 py-2.5 text-sm"
                 >
                   <span className="text-muted tabular-nums">
                     {DATE.format(new Date(p.paidAt ?? p.createdAt))}
@@ -125,7 +125,7 @@ export default async function CabinetTariff({ searchParams }: PageProps<"/cabine
 function Returned({ orderId, payment }: { orderId: string; payment: PaymentRow | null }) {
   if (payment?.status === "succeeded")
     return (
-      <p className="rounded-xl border border-accent bg-accent-soft px-4 py-3 text-sm text-accent-soft-foreground">
+      <p className="rounded-xl border border-success px-4 py-3 text-sm font-medium text-success">
         Оплата прошла: {productTitle(payment.product)} · {rub(payment.amountRub)}
       </p>
     );
