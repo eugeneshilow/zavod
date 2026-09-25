@@ -1,10 +1,13 @@
+import Link from "next/link";
 import { BAND_CLASS } from "@/lib/layout";
 import { Logo } from "@/components/brand/logo";
 import { TELEGRAM_URL } from "@/lib/landing-copy";
+import { SELLER } from "@/lib/payments";
 
 // Блок 11 витрины: футер. Форма снята с блока footer-17 автора LN (21st.dev):
-// слева имя и реквизиты, справа группы ссылок, внизу через линию копирайт.
-// Канон блоков — docs/landing/README.md.
+// слева имя и реквизиты, справа группы ссылок, внизу через линию копирайт и
+// оферта. Реквизиты — из переносчика кассы (lib/payments.ts, SELLER). Канон
+// блоков — docs/landing/README.md.
 
 const PAGE_LINKS = [
   { label: "Как работает", href: "#how" },
@@ -24,7 +27,7 @@ export function SiteFooter() {
               Новость в вертикальный ролик за шесть минут.
             </p>
             <p className="mt-4 text-xs text-foreground/50">
-              ИП Шилов Евгений Владимирович · ИНН 665914016215 · ОГРНИП 325665800131697
+              {SELLER.name} · ИНН {SELLER.inn} · ОГРНИП {SELLER.ogrnip}
             </p>
           </div>
 
@@ -53,6 +56,14 @@ export function SiteFooter() {
             <ul className="mt-4 flex flex-col gap-2">
               <li>
                 <a
+                  href={`mailto:${SELLER.email}`}
+                  className="text-sm text-foreground/70 transition-colors hover:text-foreground"
+                >
+                  {SELLER.email}
+                </a>
+              </li>
+              <li>
+                <a
                   href={TELEGRAM_URL}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -78,7 +89,9 @@ export function SiteFooter() {
 
         <div className="mt-10 flex flex-col gap-2 border-t border-foreground/10 pt-6 text-xs text-foreground/50 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 zavod</p>
-          <p>Оферта и политика данных появятся вместе с кассой.</p>
+          <Link href="/offer" className="transition-colors hover:text-foreground">
+            Оферта и контакты
+          </Link>
         </div>
       </div>
     </footer>

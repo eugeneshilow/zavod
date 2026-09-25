@@ -123,15 +123,22 @@ function orderTouches(ideas: Idea[]): Touch[] {
   return out.sort((a, b) => b.at - a.at);
 }
 
-/** Касание «оплатил» — только оплаченные строки кассы. */
+/**
+ * Касания кассы: «оплатил» — у оплаченной строки и у возвращённой (оплата
+ * была); у возвращённой ещё «вернули деньги». Ждущие и отменённые — не касания.
+ */
 function paymentTouches(payments: PaymentRow[]): Touch[] {
-  return payments
-    .filter((p) => p.status === "succeeded")
-    .map((p) => ({
-      at: p.paidAt ?? p.createdAt,
-      what: `оплатил «${productTitle(p.product)}» · ${rub(p.amountRub)}`,
-      href: "/cabinet/tariff",
-    }));
+  const href = "/cabinet/tariff";
+  return payments.flatMap((p) => {
+    const item = `«${productTitle(p.product)}» · ${rub(p.amountRub)}`;
+    const paidAt = p.paidAt ?? p.createdAt;
+    if (p.status === "succeeded") return [{ at: paidAt, what: `оплатил ${item}`, href }];
+    if (p.status !== "refunded") return [];
+    return [
+      { at: paidAt, what: `оплатил ${item}`, href },
+      { at: p.refundedAt ?? paidAt + 1, what: `вернули деньги за ${item}`, href },
+    ];
+  });
 }
 
 function build(

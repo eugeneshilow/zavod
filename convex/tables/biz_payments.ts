@@ -9,7 +9,7 @@ import { requireAdminToken } from "../services/admin_gate";
 // Канон — docs/payments/README.md.
 
 const PRODUCTS = ["reel", "month"];
-const STATUSES = ["pending", "succeeded", "canceled"];
+const STATUSES = ["pending", "succeeded", "canceled", "refunded"];
 
 const paymentValidator = v.object({
   id: v.id("biz_payments"),
@@ -22,6 +22,8 @@ const paymentValidator = v.object({
   test: v.boolean(),
   createdAt: v.number(),
   paidAt: v.union(v.number(), v.null()),
+  email: v.union(v.string(), v.null()),
+  refundedAt: v.union(v.number(), v.null()),
 });
 
 function toRow(row: Doc<"biz_payments">) {
@@ -36,6 +38,8 @@ function toRow(row: Doc<"biz_payments">) {
     test: row.test,
     createdAt: row.createdAt,
     paidAt: row.paidAt ?? null,
+    email: row.email ?? null,
+    refundedAt: row.refundedAt ?? null,
   };
 }
 
@@ -48,6 +52,7 @@ export const create = mutation({
     amountRub: v.number(),
     account: v.string(),
     test: v.boolean(),
+    email: v.optional(v.string()),
   },
   returns: v.id("biz_payments"),
   handler: async (ctx, args) => {
@@ -67,6 +72,7 @@ export const create = mutation({
       account: args.account,
       test: args.test,
       createdAt: Date.now(),
+      ...(args.email ? { email: args.email } : {}),
     });
   },
 });
@@ -97,7 +103,9 @@ export const attachYookassa = mutation({
 
 /**
  * Статус от приёмника уведомлений. Идемпотентно: повтор того же статуса —
- * ничего; `succeeded` окончателен и не откатывается. Чужой номер — `missing`.
+ * ничего. `succeeded` не откатывается в `pending` или `canceled`, из него один
+ * путь — `refunded`; в `refunded` можно и из `pending`, если уведомление об
+ * оплате опоздало. Из `refunded` никуда. Чужой номер — `missing`.
  */
 export const setStatus = mutation({
   args: {
@@ -120,11 +128,15 @@ export const setStatus = mutation({
       .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
       .first();
     if (!row) return "missing";
-    if (row.status === "succeeded" && args.status !== "succeeded") return "kept";
     if (row.status === args.status) return "same";
+    if (row.status === "refunded") return "kept";
+    if (row.status === "succeeded" && args.status !== "refunded") return "kept";
+    if (args.status === "refunded" && row.status === "canceled") return "kept";
+    const paidAt = row.paidAt ?? args.paidAt ?? Date.now();
     await ctx.db.patch(row._id, {
       status: args.status,
       ...(args.status === "succeeded" ? { paidAt: args.paidAt ?? Date.now() } : {}),
+      ...(args.status === "refunded" ? { paidAt, refundedAt: Date.now() } : {}),
     });
     return "updated";
   },

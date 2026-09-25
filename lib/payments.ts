@@ -13,22 +13,40 @@ export const PRODUCTS = [
 
 export type ProductId = (typeof PRODUCTS)[number]["id"];
 
+/**
+ * Продавец: реквизиты ИП для оферты, подвала витрины и чеков. Канон —
+ * docs/payments/README.md, «Бой: чеки, оферта, возвраты».
+ */
+export const SELLER = {
+  name: "ИП Шилов Евгений Владимирович",
+  inn: "665914016215",
+  ogrnip: "325665800131697",
+  email: "privet@vibecoding.ru",
+} as const;
+
+/**
+ * Оферта живёт на основном домене, а кабинет — на хосте `app.`: поэтому ссылка
+ * из кабинета — полным адресом, иначе хост кабинета завернёт её в кабинет.
+ */
+export const OFFER_URL = "https://zavod.today/offer";
+
 export const TARIFF_DAYS = 30;
 export const TARIFF_PLAN = "Старт";
 const DAY = 86_400_000;
 
-export type PaymentStatus = "pending" | "succeeded" | "canceled";
+export type PaymentStatus = "pending" | "succeeded" | "canceled" | "refunded";
 
 export type PaymentRow = FunctionReturnType<typeof api.tables.biz_payments.listForAdmin>[number];
 
 /** Сколько нужно от платежа, чтобы посчитать тариф и деньги. */
 export type PaymentFact = Pick<PaymentRow, "product" | "status" | "amountRub" | "paidAt">;
 
-/** Статус словом покупателя и владельца: оплачен · ждём · отменён. */
+/** Статус словом покупателя и владельца: оплачен · ждём · отменён · возврат. */
 export const STATUS_WORD: Record<string, string> = {
   pending: "ждём",
   succeeded: "оплачен",
   canceled: "отменён",
+  refunded: "возврат",
 };
 
 export function productOf(id: string) {
@@ -123,6 +141,39 @@ export function requestOrigin(h: { get(name: string): string | null }): string {
 
 export type YookassaKeys = { shopId: string; secretKey: string };
 
+/** Чеки «Чеки от ЮKassa» включены: боевой магазин ИП, `YOOKASSA_RECEIPTS=on`. */
+export function receiptsOn(): boolean {
+  return process.env.YOOKASSA_RECEIPTS === "on";
+}
+
+/** Почта для чека: одна строка вида `имя@домен.зона`, до 254 знаков. */
+export function isEmail(value: string): boolean {
+  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+export type Receipt = { email: string; description: string; amountRub: number };
+
+/**
+ * Поле `receipt` для «Чеков от ЮKassa»: покупатель — почта, одна позиция
+ * услугой, полный расчёт, без НДС (`vat_code: 1`, УСН). Названия полей — по
+ * документации ЮKassa; название позиции — до 128 знаков.
+ */
+export function receiptBody(r: Receipt) {
+  return {
+    customer: { email: r.email },
+    items: [
+      {
+        description: r.description.slice(0, 128),
+        quantity: 1,
+        amount: { value: r.amountRub.toFixed(2), currency: "RUB" },
+        vat_code: 1,
+        payment_mode: "full_payment",
+        payment_subject: "service",
+      },
+    ],
+  };
+}
+
 /** Ключи магазина из env; нет — причина строкой, значения не печатаются. */
 export function paymentsAccess(): YookassaKeys | { reason: string } {
   const shopId = process.env.YOOKASSA_SHOP_ID;
@@ -156,6 +207,8 @@ export async function createYookassaPayment(input: {
   amountRub: number;
   description: string;
   returnUrl: string;
+  /** Чек покупателю; нет — платёж без чека (тестовый магазин). */
+  receipt?: Receipt;
 }): Promise<{ id: string; confirmationUrl: string; test: boolean }> {
   const res = await fetch(API, {
     method: "POST",
@@ -170,6 +223,7 @@ export async function createYookassaPayment(input: {
       confirmation: { type: "redirect", return_url: input.returnUrl },
       description: input.description,
       metadata: { orderId: input.orderId },
+      ...(input.receipt ? { receipt: receiptBody(input.receipt) } : {}),
     }),
     cache: "no-store",
   });
@@ -191,7 +245,17 @@ export type YookassaPayment = {
   orderId: string | null;
   paidAt: number | null;
   test: boolean;
+  /** Сумма платежа, рублей; неизвестна — 0. */
+  amountRub: number;
+  /** Сколько вернули покупателю, рублей; возвратов не было — 0. */
+  refundedRub: number;
 };
+
+function rubles(money: unknown): number {
+  const value = (money as { value?: unknown } | null | undefined)?.value;
+  const n = typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
 
 /** Спросить ЮKassa о платеже: единственный источник правды о статусе. */
 export async function fetchYookassaPayment(input: {
@@ -205,13 +269,23 @@ export async function fetchYookassaPayment(input: {
   });
   // Такого платежа у магазина нет: не наш номер, отвечаем «пропущено».
   if (res.status === 404)
-    return { id: input.id, status: "not_found", orderId: null, paidAt: null, test: false };
+    return {
+      id: input.id,
+      status: "not_found",
+      orderId: null,
+      paidAt: null,
+      test: false,
+      amountRub: 0,
+      refundedRub: 0,
+    };
   if (!res.ok) throw await failure(res);
   const body = (await res.json()) as {
     id?: unknown;
     status?: unknown;
     test?: unknown;
     captured_at?: unknown;
+    amount?: unknown;
+    refunded_amount?: unknown;
     metadata?: { orderId?: unknown } | null;
   };
   const orderId = body.metadata?.orderId;
@@ -222,20 +296,39 @@ export async function fetchYookassaPayment(input: {
     orderId: typeof orderId === "string" ? orderId : null,
     paidAt: Number.isFinite(paidAt) ? paidAt : null,
     test: body.test === true,
+    amountRub: rubles(body.amount),
+    refundedRub: rubles(body.refunded_amount),
   };
 }
 
 /**
- * Уведомление ЮKassa: телу не верим, берём только номер платежа `object.id`
- * (строка до 64 знаков). Всё остальное — мусор, `null`.
+ * Наш статус из ответа ЮKassa. Возврат не меняет статус платежа в ЮKassa
+ * (`succeeded`), он виден по `refunded_amount`: вернули всю сумму — `refunded`,
+ * часть — платёж остаётся оплаченным. Ждущие статусы ЮKassa — `null`.
+ */
+export function statusFromYookassa(
+  p: Pick<YookassaPayment, "status" | "amountRub" | "refundedRub">,
+): PaymentStatus | null {
+  if (p.status === "succeeded")
+    return p.amountRub > 0 && p.refundedRub >= p.amountRub ? "refunded" : "succeeded";
+  if (p.status === "canceled") return "canceled";
+  return null;
+}
+
+/**
+ * Уведомление ЮKassa: телу не верим, берём только номер платежа (строка до 64
+ * знаков). В уведомлении о платеже это `object.id`; в `refund.succeeded` объект —
+ * возврат, и номер платежа — `object.payment_id`. Всё остальное — мусор, `null`.
  */
 export function parseNotification(body: unknown): { event: string; paymentId: string } | null {
   if (!body || typeof body !== "object") return null;
-  const { event, object } = body as { event?: unknown; object?: unknown };
+  const { event: rawEvent, object } = body as { event?: unknown; object?: unknown };
   if (!object || typeof object !== "object") return null;
-  const id = (object as { id?: unknown }).id;
+  const event = typeof rawEvent === "string" ? rawEvent : "";
+  const fields = object as { id?: unknown; payment_id?: unknown };
+  const id = event.startsWith("refund.") ? fields.payment_id : fields.id;
   if (typeof id !== "string" || id.length === 0 || id.length > 64) return null;
-  return { event: typeof event === "string" ? event : "", paymentId: id };
+  return { event, paymentId: id };
 }
 
 // ---------------------------------------------------------------- загрузка

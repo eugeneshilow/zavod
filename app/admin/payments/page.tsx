@@ -5,6 +5,7 @@ import {
   paidThisMonthRub,
   paymentsAccess,
   productTitle,
+  receiptsOn,
   requestOrigin,
   rub,
   STATUS_WORD,
@@ -13,9 +14,9 @@ import { Box, SectionLabel } from "../_components/shell";
 
 export const dynamic = "force-dynamic";
 
-// /admin/payments — касса глазами владельца: четыре числа, все платежи,
-// состояние кассы (ключи — только факт наличия, значения не печатаются),
-// канон. Канон — docs/payments/README.md.
+// /admin/payments — касса глазами владельца: пять чисел, все платежи,
+// состояние кассы (ключи — только факт наличия, значения не печатаются;
+// чеки вкл/выкл), канон. Канон — docs/payments/README.md.
 
 const DATE = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "Europe/Moscow",
@@ -29,6 +30,7 @@ const STATUS_TONE: Record<string, string> = {
   succeeded: "text-emerald-700",
   pending: "text-amber-700",
   canceled: "text-zinc-400",
+  refunded: "text-zinc-500",
 };
 
 export default async function PaymentsPage() {
@@ -41,20 +43,26 @@ export default async function PaymentsPage() {
   const webhook = `${requestOrigin(h)}/api/yookassa`;
   const rows = "reason" in payments ? [] : payments;
   const mode = rows.length === 0 ? "платежей ещё не было" : rows[0].test ? "тест" : "бой";
+  const count = (status: string) => String(rows.filter((p) => p.status === status).length);
   return (
     <>
       <SectionLabel id="payments">
         КАССА — платежи ЮKassa, статус пишет только уведомление
       </SectionLabel>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Оплачено за месяц" value={rub(paidThisMonthRub(rows))} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Kpi
+          label="Оплачено за месяц"
+          value={rub(paidThisMonthRub(rows))}
+          className="col-span-2 lg:col-span-1"
+        />
         <Kpi label="Платежей" value={String(rows.length)} />
-        <Kpi label="Ждут" value={String(rows.filter((p) => p.status === "pending").length)} />
-        <Kpi label="Отменено" value={String(rows.filter((p) => p.status === "canceled").length)} />
+        <Kpi label="Ждут" value={count("pending")} />
+        <Kpi label="Отменено" value={count("canceled")} />
+        <Kpi label="Возвраты" value={count("refunded")} />
       </div>
       <p className="text-[12px] text-zinc-500">
-        Ключи ЮKassa: {"reason" in keys ? "не заданы" : "заданы"} · режим: {mode} · вебхук:{" "}
-        <code className="text-zinc-800">{webhook}</code>
+        Ключи ЮKassa: {"reason" in keys ? "не заданы" : "заданы"} · режим: {mode} · Чеки:{" "}
+        {receiptsOn() ? "вкл" : "выкл"} · вебхук: <code className="text-zinc-800">{webhook}</code>
       </p>
       <Box title="Платежи" aside="новые сверху, до 500">
         {"reason" in payments ? (
@@ -114,9 +122,9 @@ export default async function PaymentsPage() {
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className="rounded-md border border-zinc-200 bg-white p-3">
+    <div className={`rounded-md border border-zinc-200 bg-white p-3 ${className ?? ""}`}>
       <p className="text-[10px] text-zinc-500">{label}</p>
       <p className="mt-0.5 text-xl font-semibold text-zinc-950 tabular-nums">{value}</p>
     </div>
