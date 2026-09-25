@@ -196,6 +196,24 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_created", ["createdAt"]),
 
+  // Платежи кассы: наш номер заказа, номер ЮKassa, товар, сумма, статус.
+  // Тариф не хранится — его считает lib/payments.ts из оплаченных строк.
+  // Канон — docs/payments/README.md.
+  biz_payments: defineTable({
+    orderId: v.string(),
+    yookassaId: v.optional(v.string()),
+    product: v.string(),
+    amountRub: v.number(),
+    status: v.string(),
+    account: v.string(),
+    test: v.boolean(),
+    createdAt: v.number(),
+    paidAt: v.optional(v.number()),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_account_created", ["account", "createdAt"])
+    .index("by_created", ["createdAt"]),
+
   // Дневной снимок аккаунта: подписчики и расход суточного лимита.
   ops_social_snapshots: defineTable({
     network: v.string(),

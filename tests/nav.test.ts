@@ -55,6 +55,7 @@ describe("дерево хедера из списка в docs/admin.md", () => {
       "/admin/brand",
       "/admin/cabinet",
       "/admin/customers",
+      "/admin/payments",
     ]);
     expect(hrefs).not.toContain("/admin/reels");
     expect(hrefs).not.toContain("/admin/journal");

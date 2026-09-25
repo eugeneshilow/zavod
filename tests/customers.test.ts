@@ -8,6 +8,7 @@ import {
   type StoredCustomer,
 } from "@/lib/customers";
 import type { Idea } from "@/lib/social";
+import type { PaymentRow } from "@/lib/payments";
 
 // Зона customers: стадия по фактам, человек из заказов, поиск, подсказка.
 // Канон — docs/customers/README.md.
@@ -104,6 +105,46 @@ describe("клиентская база", () => {
 
   it("без заказов кабинета демо-строки нет", () => {
     expect(composeCustomers({ stored: [], ideas: [idea({ id: "x" })] }, now).customers).toEqual([]);
+  });
+});
+
+describe("оплаты из кассы", () => {
+  const paid = (daysAgo: number, product = "month", status = "succeeded"): PaymentRow =>
+    ({
+      id: `p${daysAgo}${product}`,
+      orderId: `pay-${daysAgo}${product}`,
+      yookassaId: null,
+      product,
+      amountRub: product === "month" ? 4900 : 690,
+      status,
+      account: "ruvibecoding",
+      test: true,
+      createdAt: now - daysAgo * DAY,
+      paidAt: status === "succeeded" ? now - daysAgo * DAY : null,
+    }) as PaymentRow;
+  const demo = (payments: PaymentRow[]) =>
+    composeCustomers(
+      { stored: [], ideas: [idea({ id: "i1", order, status: "done" })], payments },
+      now,
+    ).customers.find((c) => c.id === "demo");
+
+  it("месяц оплачен 10 дней назад — клиент, лента и деньги", () => {
+    const c = demo([paid(10), paid(12, "month", "canceled")]);
+    expect(c).toMatchObject({ stage: "client", payments: 1, paidRub: 4900, tariffAlive: true });
+    expect(c?.touches.find((t) => t.what.startsWith("оплатил"))).toMatchObject({
+      what: "оплатил «Месяц» · 4\u00a0900 ₽",
+      href: "/cabinet/tariff",
+    });
+  });
+
+  it("месяц оплачен 40 дней назад — ушёл", () => {
+    expect(demo([paid(40)])?.stage).toBe("gone");
+  });
+
+  it("оплата за этот месяц по Москве в итогах, платящие считаются", () => {
+    const view = composeCustomers({ stored: [], ideas: [], payments: [paid(10)] }, now);
+    expect(view.totals).toMatchObject({ paying: 1, paidMonthRub: 4900 });
+    expect(view.customers[0]?.id).toBe("demo");
   });
 });
 

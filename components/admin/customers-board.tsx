@@ -248,7 +248,13 @@ function Card({ c }: { c: Customer }) {
           n={2}
           title="Деньги"
           main={c.payments ? `${c.payments} оплат · ${RUB(c.paidRub)}` : "оплат нет"}
-          sub="касса — следующий урок главы"
+          sub={
+            c.tariffUntil === null
+              ? "тарифа нет"
+              : c.tariffAlive
+                ? `тариф «Старт» до ${DATE.format(new Date(c.tariffUntil)).slice(0, 5)}`
+                : `тариф кончился ${DATE.format(new Date(c.tariffUntil)).slice(0, 5)}`
+          }
         />
         <Floor
           n={3}
