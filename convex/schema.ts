@@ -209,6 +209,10 @@ export default defineSchema({
     test: v.boolean(),
     createdAt: v.number(),
     paidAt: v.optional(v.number()),
+    // Почта для чека «Чеки от ЮKassa»; платежи без чека — без поля.
+    email: v.optional(v.string()),
+    // Когда приёмник узнал о полном возврате (статус `refunded`).
+    refundedAt: v.optional(v.number()),
   })
     .index("by_order", ["orderId"])
     .index("by_account_created", ["account", "createdAt"])

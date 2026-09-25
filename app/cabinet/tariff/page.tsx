@@ -5,9 +5,11 @@ import { AutoRefresh } from "@/components/cabinet/auto-refresh";
 import { DEMO_CUSTOMER } from "@/lib/cabinet";
 import {
   loadAccountPayments,
+  OFFER_URL,
   paymentsAccess,
   PRODUCTS,
   productTitle,
+  receiptsOn,
   rub,
   STATUS_WORD,
   tariffLine,
@@ -17,9 +19,16 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Экран «Тариф»: строка тарифа, два товара с кнопкой «Оплатить», плашка
-// возврата с оплаты и список платежей покупателя. Тариф считается из
-// оплаченных строк. Канон — docs/payments/README.md, «Экраны».
+// Экран «Тариф»: строка тарифа, почта для чека, два товара с кнопкой
+// «Оплатить», строка об оферте, плашка возврата с оплаты и список платежей
+// покупателя. Тариф считается из оплаченных строк. Одна форма на обе
+// карточки: почта общая, товар несёт нажатая кнопка. Канон —
+// docs/payments/README.md, «Экраны».
+
+const STATUS_TONE: Record<string, string> = {
+  succeeded: "text-accent",
+  canceled: "text-danger",
+};
 
 const DATE = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "Europe/Moscow",
@@ -38,41 +47,72 @@ export default async function CabinetTariff({ searchParams }: PageProps<"/cabine
   const rows: PaymentRow[] = "reason" in payments ? [] : payments;
   const tariff = tariffOf(rows);
   const returned = orderId ? (rows.find((p) => p.orderId === orderId) ?? null) : null;
+  const receipts = receiptsOn();
+  const lastEmail = rows.find((p) => p.email)?.email ?? "";
+  const cards = (
+    <section className="grid gap-4 md:grid-cols-2" aria-label="Товары">
+      {PRODUCTS.map((p) => (
+        <Card key={p.id}>
+          <Card.Header>
+            <Card.Title>{p.title}</Card.Title>
+            <Card.Description>{p.note}</Card.Description>
+          </Card.Header>
+          <Card.Content>
+            <p className="text-3xl font-semibold tracking-tight tabular-nums">{rub(p.priceRub)}</p>
+            {"reason" in keys ? (
+              <p className="mt-4 text-sm text-muted">
+                Касса не подключена: нет YOOKASSA_SHOP_ID / YOOKASSA_SECRET_KEY
+              </p>
+            ) : (
+              <button
+                type="submit"
+                name="product"
+                value={p.id}
+                className="mt-4 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground"
+              >
+                Оплатить
+              </button>
+            )}
+          </Card.Content>
+        </Card>
+      ))}
+    </section>
+  );
   return (
     <>
       <Header title="Тариф" subtitle={tariffLine(tariff)} order={false} />
       {orderId ? <Returned orderId={orderId} payment={returned} /> : null}
       {error ? <p className="text-sm text-danger">Оплата не началась: {error}.</p> : null}
-      <section className="grid gap-4 md:grid-cols-2" aria-label="Товары">
-        {PRODUCTS.map((p) => (
-          <Card key={p.id}>
-            <Card.Header>
-              <Card.Title>{p.title}</Card.Title>
-              <Card.Description>{p.note}</Card.Description>
-            </Card.Header>
-            <Card.Content>
-              <p className="text-3xl font-semibold tracking-tight tabular-nums">
-                {rub(p.priceRub)}
-              </p>
-              {"reason" in keys ? (
-                <p className="mt-4 text-sm text-muted">
-                  Касса не подключена: нет YOOKASSA_SHOP_ID / YOOKASSA_SECRET_KEY
-                </p>
-              ) : (
-                <form action={buyProduct} className="mt-4">
-                  <input type="hidden" name="product" value={p.id} />
-                  <button
-                    type="submit"
-                    className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground"
-                  >
-                    Оплатить
-                  </button>
-                </form>
-              )}
-            </Card.Content>
-          </Card>
-        ))}
-      </section>
+      {"reason" in keys ? (
+        cards
+      ) : (
+        <form action={buyProduct} className="flex flex-col gap-4" aria-label="Оплата">
+          {/* Enter в поле почты не покупает первый товар: неактивная кнопка по умолчанию гасит неявную отправку формы. */}
+          <button type="submit" disabled hidden aria-hidden="true" />
+          <label className="flex max-w-sm flex-col gap-1.5">
+            <span className="text-sm font-medium">Почта для чека</span>
+            <input
+              type="email"
+              name="email"
+              required={receipts}
+              defaultValue={lastEmail}
+              autoComplete="email"
+              placeholder="you@example.ru"
+              className="w-full rounded-xl border border-border bg-surface-secondary px-3 py-2.5 text-sm outline-none focus:border-accent"
+            />
+            <span className="text-xs text-muted">
+              {receipts ? "Чек об оплате придёт на эту почту" : "Чеки пока выключены"}
+            </span>
+          </label>
+          {cards}
+          <p className="text-sm text-muted">
+            Нажимая «Оплатить», вы принимаете{" "}
+            <a href={OFFER_URL} className="underline underline-offset-2 hover:text-foreground">
+              оферту
+            </a>
+          </p>
+        </form>
+      )}
       <Card>
         <Card.Header>
           <Card.Title>Платежи</Card.Title>
@@ -99,15 +139,7 @@ export default async function CabinetTariff({ searchParams }: PageProps<"/cabine
                   </span>
                   <span className="truncate">{productTitle(p.product)}</span>
                   <span className="text-right tabular-nums">{rub(p.amountRub)}</span>
-                  <span
-                    className={
-                      p.status === "succeeded"
-                        ? "text-accent"
-                        : p.status === "canceled"
-                          ? "text-danger"
-                          : "text-muted"
-                    }
-                  >
+                  <span className={STATUS_TONE[p.status] ?? "text-muted"}>
                     {STATUS_WORD[p.status] ?? p.status}
                   </span>
                   <span className="text-xs text-muted">{p.test ? "тест" : ""}</span>
@@ -133,6 +165,12 @@ function Returned({ orderId, payment }: { orderId: string; payment: PaymentRow |
     return (
       <p className="rounded-xl border border-danger px-4 py-3 text-sm text-danger">
         Платёж отменён: деньги не списаны
+      </p>
+    );
+  if (payment?.status === "refunded")
+    return (
+      <p className="rounded-xl border border-border px-4 py-3 text-sm text-muted">
+        Деньги вернули: {productTitle(payment.product)} · {rub(payment.amountRub)}
       </p>
     );
   return (

@@ -141,6 +141,23 @@ describe("оплаты из кассы", () => {
     expect(demo([paid(40)])?.stage).toBe("gone");
   });
 
+  it("возвращённый платёж не делает клиентом: пробует, ноль оплат, в ленте возврат", () => {
+    const refunded = {
+      ...paid(10),
+      status: "refunded",
+      paidAt: now - 10 * DAY,
+      refundedAt: now - 9 * DAY,
+    } as PaymentRow;
+    const c = demo([refunded]);
+    expect(c).toMatchObject({ stage: "trial", payments: 0, paidRub: 0, tariffAlive: false });
+    expect(c?.touches.find((t) => t.what.startsWith("вернули"))).toMatchObject({
+      at: now - 9 * DAY,
+      what: "вернули деньги за «Месяц» · 4\u00a0900 ₽",
+    });
+    const view = composeCustomers({ stored: [], ideas: [], payments: [refunded] }, now);
+    expect(view.totals).toMatchObject({ paying: 0, paidMonthRub: 0 });
+  });
+
   it("оплата за этот месяц по Москве в итогах, платящие считаются", () => {
     const view = composeCustomers({ stored: [], ideas: [], payments: [paid(10)] }, now);
     expect(view.totals).toMatchObject({ paying: 1, paidMonthRub: 4900 });

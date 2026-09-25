@@ -1,11 +1,17 @@
 import { api } from "@/convex/_generated/api";
-import { fetchYookassaPayment, parseNotification, paymentsAccess } from "@/lib/payments";
+import {
+  fetchYookassaPayment,
+  parseNotification,
+  paymentsAccess,
+  statusFromYookassa,
+} from "@/lib/payments";
 import { reelsAccess } from "@/lib/reels";
 
 // Приёмник уведомлений ЮKassa. Телу не верит: берёт из него только номер
-// платежа, сам спрашивает ЮKassa статус и пишет в строку то, что ответила
-// ЮKassa. Мусор, чужой номер, выключенная касса — 200 и ничего. Сбой на
-// нашей стороне (ЮKassa или база не ответили) — 500: ЮKassa повторит
+// платежа (у `refund.succeeded` — `object.payment_id`), сам спрашивает ЮKassa
+// платёж и пишет в строку то, что ответила ЮKassa: оплачен, отменён или
+// возвращён целиком. Мусор, чужой номер, выключенная касса — 200 и ничего.
+// Сбой на нашей стороне (ЮKassa или база не ответили) — 500: ЮKassa повторит
 // уведомление, оплата не потеряется. Канон — docs/payments/README.md.
 
 export const dynamic = "force-dynamic";
@@ -35,19 +41,15 @@ export async function POST(request: Request): Promise<Response> {
     return text(`ЮKassa не ответила: ${error instanceof Error ? error.message : error}`, 500);
   }
   if (!payment.orderId) return text("платёж не наш — пропущено");
-  const status =
-    payment.status === "succeeded"
-      ? "succeeded"
-      : payment.status === "canceled"
-        ? "canceled"
-        : null;
+  const status = statusFromYookassa(payment);
   if (!status) return text(`статус ${payment.status} — ждём дальше`);
+  const paid = status === "succeeded" || status === "refunded";
   try {
     const result = await access.client.mutation(api.tables.biz_payments.setStatus, {
       token: access.token,
       orderId: payment.orderId,
       status,
-      ...(status === "succeeded" && payment.paidAt !== null ? { paidAt: payment.paidAt } : {}),
+      ...(paid && payment.paidAt !== null ? { paidAt: payment.paidAt } : {}),
     });
     return text(`${payment.orderId}: ${status} (${result})`);
   } catch (error) {
