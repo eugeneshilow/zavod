@@ -56,6 +56,17 @@ export default function OfferPage() {
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-balance md:text-5xl">
             Оферта и контакты
           </h1>
+          <div
+            role="note"
+            className="mt-6 rounded-2xl border-2 border-amber-400 bg-amber-50 px-5 py-4 text-base leading-relaxed text-amber-950"
+          >
+            <p className="font-bold">Это пример оферты, а не юридический документ.</p>
+            <p className="mt-2">
+              zavod.today — учебный проект курса vibecoding.ru: на нём показано, как устроить кассу.
+              Текст ниже написан для примера, юрист его не проверял. Для настоящей оферты своего
+              продукта обратитесь к юристу.
+            </p>
+          </div>
           <p className="mt-6 text-base leading-relaxed text-foreground/70">
             Здесь условия, на которых zavod.today продаёт ролики. Нажимая «Оплатить» в кабинете, вы
             принимаете эти условия.
@@ -114,6 +125,17 @@ export default function OfferPage() {
                 За разовый ролик вернём деньги, если написали до того, как ролик вышел. За месяц —
                 если написали в течение 14 дней с оплаты и за это время не заказали ни одного
                 ролика.
+              </p>
+            </Section>
+
+            <Section title="Какие данные мы берём">
+              <p>
+                Для оплаты мы берём только почту: на неё ЮKassa присылает чек. Данные карты вводятся
+                на странице ЮKassa, к нам они не попадают.
+              </p>
+              <p>
+                Почта хранится вместе с платежом и нужна для чека и ответа на ваше письмо. Чтобы мы
+                её удалили, напишите на {mail}.
               </p>
             </Section>
 
