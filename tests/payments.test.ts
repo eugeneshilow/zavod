@@ -39,7 +39,13 @@ afterEach(() => {
 
 describe("тариф из платежей", () => {
   it("нет платежей — тарифа нет", () => {
-    expect(tariffOf([], now)).toEqual({ plan: null, until: null, alive: false, reelsLeft: 0 });
+    expect(tariffOf([], now)).toEqual({
+      plan: null,
+      until: null,
+      alive: false,
+      reelsLeft: 0,
+      active: false,
+    });
   });
 
   it("месяц 10 дней назад — «Старт» до paidAt + 30 дней", () => {
@@ -67,6 +73,15 @@ describe("тариф из платежей", () => {
   it("два разовых ролика — запас 2", () => {
     const reel = { product: "reel", amountRub: 690 };
     expect(tariffOf([pay(reel), pay(reel)], now).reelsLeft).toBe(2);
+  });
+
+  it("разовый ролик 5 дней назад — активен без тарифа, 40 дней назад — нет", () => {
+    const reel = { product: "reel" } as const;
+    expect(tariffOf([pay({ ...reel, paidAt: now - 5 * DAY })], now)).toMatchObject({
+      alive: false,
+      active: true,
+    });
+    expect(tariffOf([pay({ ...reel, paidAt: now - 40 * DAY })], now).active).toBe(false);
   });
 
   it("оплачено за месяц — с 1-го числа по Москве", () => {

@@ -45,11 +45,15 @@ export type Tariff = {
   until: number | null;
   alive: boolean;
   reelsLeft: number;
+  /** Платит сейчас: тариф жив или любая оплата за последние 30 дней. */
+  active: boolean;
 };
 
 /**
  * Тариф из платежей: последний оплаченный «Месяц» даёт «Старт» до
  * `paidAt + 30 дней`, оплаченные «Разовые ролики» — запас роликов.
+ * Покупатель активен, пока жив тариф или с любой оплаты не прошло 30 дней:
+ * купивший один ролик — клиент, а не «ушёл».
  */
 export function tariffOf(payments: PaymentFact[], now = Date.now()): Tariff {
   const paid = payments.filter((p) => p.status === "succeeded" && p.paidAt !== null);
@@ -59,11 +63,13 @@ export function tariffOf(payments: PaymentFact[], now = Date.now()): Tariff {
   );
   const until = Number.isFinite(lastMonth) ? lastMonth + TARIFF_DAYS * DAY : null;
   const alive = until !== null && until > now;
+  const lastPaid = Math.max(...paid.map((p) => p.paidAt ?? 0), -Infinity);
   return {
     plan: alive ? TARIFF_PLAN : null,
     until,
     alive,
     reelsLeft: paid.filter((p) => p.product === "reel").length,
+    active: alive || (Number.isFinite(lastPaid) && now - lastPaid < TARIFF_DAYS * DAY),
   };
 }
 
@@ -197,6 +203,9 @@ export async function fetchYookassaPayment(input: {
     headers: { Authorization: auth(input) },
     cache: "no-store",
   });
+  // Такого платежа у магазина нет: не наш номер, отвечаем «пропущено».
+  if (res.status === 404)
+    return { id: input.id, status: "not_found", orderId: null, paidAt: null, test: false };
   if (!res.ok) throw await failure(res);
   const body = (await res.json()) as {
     id?: unknown;
