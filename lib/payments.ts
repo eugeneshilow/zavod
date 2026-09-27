@@ -7,7 +7,7 @@ import { reelsAccess } from "@/lib/reels";
 // docs/payments/README.md.
 
 export const PRODUCTS = [
-  { id: "reel", title: "Разовый ролик", priceRub: 690, note: "один заказ в кабинете" },
+  { id: "reel", title: "Разовый ролик", priceRub: 690, note: "один ролик по вашей новости" },
   { id: "month", title: "Месяц", priceRub: 4900, note: "тариф «Старт» на 30 дней" },
 ] as const;
 
@@ -29,6 +29,12 @@ export const SELLER = {
  * из кабинета — полным адресом, иначе хост кабинета завернёт её в кабинет.
  */
 export const OFFER_URL = "https://zavod.today/offer";
+
+/** Страница оплаты на витрине: открыта без входа, живёт на основном домене. */
+export const PAY_PATH = "/pay";
+
+/** Аккаунт строки платежа с витрины: покупатель платит без входа. */
+export const SITE_ACCOUNT = "site";
 
 export const TARIFF_DAYS = 30;
 export const TARIFF_PLAN = "Старт";
@@ -329,6 +335,82 @@ export function parseNotification(body: unknown): { event: string; paymentId: st
   const id = event.startsWith("refund.") ? fields.payment_id : fields.id;
   if (typeof id !== "string" || id.length === 0 || id.length > 64) return null;
   return { event, paymentId: id };
+}
+
+// ---------------------------------------------------------------- старт оплаты
+
+export type Product = (typeof PRODUCTS)[number];
+
+/**
+ * Разбор формы «Оплатить»: товар из списка, почта похожа на адрес. Витрина
+ * просит почту всегда — на неё чек и по ней связь с покупателем; кабинет —
+ * только с включёнными чеками.
+ */
+export function checkoutInput(
+  form: { get(name: string): unknown },
+  opts: { emailRequired: boolean },
+): { product: Product; email: string } | { reason: string } {
+  const product = productOf(String(form.get("product") ?? ""));
+  if (!product) return { reason: "такого товара нет" };
+  const email = String(form.get("email") ?? "").trim();
+  if (opts.emailRequired && !email) return { reason: "укажите почту" };
+  if (email && !isEmail(email)) return { reason: "почта не похожа на адрес" };
+  return { product, email };
+}
+
+/**
+ * Старт оплаты для витрины и кабинета: строка `pending` в базе, платёж в
+ * ЮKassa, номер платежа в строку. Отдаёт ссылку на страницу оплаты ЮKassa
+ * или причину строкой. Возврат покупателя оплату не подтверждает — это
+ * делает приёмник уведомлений.
+ */
+export async function startPayment(input: {
+  product: Product;
+  email: string;
+  account: string;
+  /** Адрес сайта, с которого платят: возврат с оплаты — туда же. */
+  origin: string;
+  returnPath: string;
+}): Promise<{ confirmationUrl: string } | { reason: string }> {
+  const keys = paymentsAccess();
+  if ("reason" in keys) return { reason: `касса не подключена: ${keys.reason}` };
+  const access = reelsAccess();
+  if ("reason" in access) return access;
+  const receipts = receiptsOn();
+  if (receipts && !input.email) return { reason: "укажите почту для чека" };
+  const { product, email } = input;
+  const orderId = newOrderId();
+  try {
+    await access.client.mutation(api.tables.biz_payments.create, {
+      token: access.token,
+      orderId,
+      product: product.id,
+      amountRub: product.priceRub,
+      account: input.account,
+      // Режим магазина знает только ЮKassa: её ответ уточнит пометку ниже.
+      test: true,
+      ...(email ? { email } : {}),
+    });
+    const payment = await createYookassaPayment({
+      ...keys,
+      orderId,
+      amountRub: product.priceRub,
+      description: `zavod.today · ${product.title} · ${orderId}`,
+      returnUrl: `${input.origin}${input.returnPath}?order=${orderId}`,
+      ...(receipts
+        ? { receipt: { email, description: product.title, amountRub: product.priceRub } }
+        : {}),
+    });
+    await access.client.mutation(api.tables.biz_payments.attachYookassa, {
+      token: access.token,
+      orderId,
+      yookassaId: payment.id,
+      test: payment.test,
+    });
+    return { confirmationUrl: payment.confirmationUrl };
+  } catch (error) {
+    return { reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 // ---------------------------------------------------------------- загрузка

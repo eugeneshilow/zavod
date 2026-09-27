@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 const PUBLIC: string[] = [
   "app/page.tsx",
   "app/offer",
+  "app/pay",
   "app/cabinet",
   "components/ui",
   "components/cabinet",

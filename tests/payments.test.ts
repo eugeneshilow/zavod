@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  checkoutInput,
   createYookassaPayment,
   monthStartMsk,
   paidThisMonthRub,
@@ -8,6 +9,7 @@ import {
   PRODUCTS,
   requestOrigin,
   SELLER,
+  SITE_ACCOUNT,
   statusFromYookassa,
   TARIFF_DAYS,
   tariffOf,
@@ -433,6 +435,84 @@ describe("приёмник /api/yookassa", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mutation).not.toHaveBeenCalled();
     expect(GET().status).toBe(405);
+  });
+});
+
+describe("оплата на витрине /pay", () => {
+  const form = (fields: Record<string, string>) => {
+    const data = new FormData();
+    for (const [k, v] of Object.entries(fields)) data.set(k, v);
+    return data;
+  };
+
+  it("разбор формы: товар из списка, почта по правилу экрана", () => {
+    expect(checkoutInput(form({ product: "gold" }), { emailRequired: false })).toEqual({
+      reason: "такого товара нет",
+    });
+    expect(checkoutInput(form({ product: "reel" }), { emailRequired: true })).toEqual({
+      reason: "укажите почту",
+    });
+    expect(
+      checkoutInput(form({ product: "reel", email: "нет" }), { emailRequired: false }),
+    ).toEqual({ reason: "почта не похожа на адрес" });
+    const ok = checkoutInput(form({ product: "month", email: " a@b.ru " }), {
+      emailRequired: true,
+    });
+    expect(ok).toEqual({ product: PRODUCTS[1], email: "a@b.ru" });
+    expect(checkoutInput(form({ product: "reel" }), { emailRequired: false })).toEqual({
+      product: PRODUCTS[0],
+      email: "",
+    });
+  });
+
+  it("без почты — назад на /pay с ошибкой, в ЮKassa и базу не ходим", async () => {
+    vi.stubEnv("YOOKASSA_SHOP_ID", "123");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "test_x");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { paySite } = await import("@/app/pay/actions");
+    await expect(paySite(form({ product: "reel" }))).rejects.toThrow(/redirect \/pay\?error=/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mutation).not.toHaveBeenCalled();
+  });
+
+  it("с почтой — строка на аккаунт витрины, возврат с оплаты на /pay", async () => {
+    vi.stubEnv("YOOKASSA_SHOP_ID", "123");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "test_x");
+    vi.stubEnv("YOOKASSA_RECEIPTS", "");
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      void url;
+      void init;
+      return Response.json({
+        id: "yk-2",
+        test: true,
+        confirmation: { confirmation_url: "https://yoomoney.ru/checkout/2" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { paySite } = await import("@/app/pay/actions");
+    await expect(paySite(form({ product: "reel", email: "buyer@example.ru" }))).rejects.toThrow(
+      "redirect https://yoomoney.ru/checkout/2",
+    );
+    expect(mutation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        account: SITE_ACCOUNT,
+        product: "reel",
+        email: "buyer@example.ru",
+      }),
+    );
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.confirmation.return_url).toMatch(/^http:\/\/app\.localhost:3222\/pay\?order=pay-/);
+  });
+
+  it("витрина ведёт на оплату: кнопка в цене и ответ «Как платить?»", async () => {
+    const { PricingCard } = await import("@/components/ui/pricing-card");
+    expect(renderToStaticMarkup(PricingCard())).toContain('href="/pay"');
+    const { FAQ } = await import("@/lib/landing-copy");
+    const how = FAQ.find((f) => f.q === "Как платить?");
+    expect(how?.a).toContain("«Оплатить»");
+    expect(how?.a).not.toMatch(/позже/);
   });
 });
 

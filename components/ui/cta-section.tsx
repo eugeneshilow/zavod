@@ -1,10 +1,11 @@
 import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
 import { TELEGRAM_URL } from "@/lib/landing-copy";
+import { PAY_PATH } from "@/lib/payments";
 
 // Блок 10 витрины: финальный призыв. Форма снята с блока cta-01 автора Felipe
 // Menezes (21st.dev): скруглённая плашка, одна фраза, одна чёрная кнопка. Фон у
 // донора серый, у нас белый: серых лент на витрине нет. Канон блоков —
-// docs/landing/README.md.
+// docs/landing/README.md. Кнопка — оплата на `/pay`, вопрос до оплаты — в Telegram.
 
 export function CtaSection() {
   return (
@@ -15,15 +16,21 @@ export function CtaSection() {
             Есть новость? Сделаем ролик, пока она горячая.
           </h2>
           <a
-            href={TELEGRAM_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={PAY_PATH}
             className="mt-8 inline-block rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
           >
-            Написать в Telegram
+            Оплатить
           </a>
-          <p className="mt-4 text-xs text-foreground/50">
-            Форма заказа на сайте появится следующим шагом.
+          <p className="mt-4 text-sm text-foreground/50">
+            Вопрос до оплаты —{" "}
+            <a
+              href={TELEGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              в Telegram
+            </a>
           </p>
         </div>
       </div>

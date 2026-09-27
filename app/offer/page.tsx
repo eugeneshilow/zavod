@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 };
 
 /** Дата редакции: правка текста оферты — новая дата. */
-const EDITION = "25 сентября 2026";
+const EDITION = "27 сентября 2026";
 
 const LINK = "underline underline-offset-2 transition-colors hover:text-foreground";
 
@@ -68,8 +68,8 @@ export default function OfferPage() {
             </p>
           </div>
           <p className="mt-6 text-base leading-relaxed text-foreground/70">
-            Здесь условия, на которых zavod.today продаёт ролики. Нажимая «Оплатить» в кабинете, вы
-            принимаете эти условия.
+            Здесь условия, на которых zavod.today продаёт ролики. Нажимая «Оплатить» на сайте или в
+            кабинете, вы принимаете эти условия.
           </p>
 
           <div className="mt-10">
@@ -114,8 +114,12 @@ export default function OfferPage() {
 
             <Section title="Как выдаётся">
               <p>
-                Всё выдаётся в личном кабинете на app.zavod.today. После оплаты вы заказываете ролик
-                в кабинете, и готовый ролик появляется там же.
+                После оплаты на сайте пришлите ссылку на новость и номер заказа в Telegram или на{" "}
+                {mail}. Готовый ролик пришлём туда же.
+              </p>
+              <p>
+                В личном кабинете на app.zavod.today ролик заказывают в кабинете, и готовый ролик
+                появляется там же.
               </p>
             </Section>
 
