@@ -523,6 +523,8 @@ describe("оферта /offer", () => {
     expect(metadata.title).toBe("Оферта — zavod.today");
     for (const text of [SELLER.name, SELLER.inn, SELLER.ogrnip, SELLER.email, "14 дней"])
       expect(html).toContain(text);
+    // живой магазин: оферта без плашки «это пример» (⚖️ offer-real-for-live-shop)
+    expect(html).not.toContain("пример оферты");
     for (const p of PRODUCTS) {
       expect(html).toContain(p.title);
       expect(html).toContain(new Intl.NumberFormat("ru-RU").format(p.priceRub));
