@@ -1,12 +1,12 @@
 import { BAND_CLASS, SECTION_CLASS } from "@/lib/layout";
-import { PRODUCTS, rub } from "@/lib/payments";
+import { PAY_PATH, PRODUCTS, rub } from "@/lib/payments";
 import { Check } from "lucide-react";
 
 // Блок 7 витрины: цена. Форма снята с блока pricing-17 автора LN (21st.dev) —
 // одна карточка тарифа со списком «что входит»; у нас колонки стоят рядом, а не
 // друг под другом, потому что цена одна и список короткий. Канон блоков —
 // docs/landing/README.md. Цены — из кассы (lib/payments.ts, PRODUCTS), те же, что
-// в оферте и кабинете.
+// в оферте и кабинете. Кнопка ведёт на оплату `/pay` (канон — docs/payments/README.md).
 
 const INCLUDED = [
   "вертикальный ролик до 60 секунд",
@@ -44,10 +44,10 @@ export function PricingCard() {
                 ))}
               </ul>
               <a
-                href="#cta"
+                href={PAY_PATH}
                 className="mt-6 inline-block rounded-full bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
               >
-                Сделать ролик
+                Оплатить
               </a>
             </div>
 

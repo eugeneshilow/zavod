@@ -36,6 +36,16 @@ describe("/admin", () => {
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
   });
 
+  it("оплата на основном домене открыта без входа", async () => {
+    process.env.ADMIN_PASSWORD = envPassword();
+    const res = await proxy(
+      new NextRequest("http://localhost:3000/pay", { headers: { host: "localhost:3000" } }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+
   it("с паролем показывает двери зон хедера", async () => {
     const password = envPassword();
     process.env.ADMIN_PASSWORD = password;
