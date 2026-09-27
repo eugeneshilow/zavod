@@ -56,17 +56,6 @@ export default function OfferPage() {
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-balance md:text-5xl">
             Оферта и контакты
           </h1>
-          <div
-            role="note"
-            className="mt-6 rounded-2xl border-2 border-amber-400 bg-amber-50 px-5 py-4 text-base leading-relaxed text-amber-950"
-          >
-            <p className="font-bold">Это пример оферты, а не юридический документ.</p>
-            <p className="mt-2">
-              zavod.today — учебный проект курса vibecoding.ru: на нём показано, как устроить кассу.
-              Текст ниже написан для примера, юрист его не проверял. Для настоящей оферты своего
-              продукта обратитесь к юристу.
-            </p>
-          </div>
           <p className="mt-6 text-base leading-relaxed text-foreground/70">
             Здесь условия, на которых zavod.today продаёт ролики. Нажимая «Оплатить» на сайте или в
             кабинете, вы принимаете эти условия.
