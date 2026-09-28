@@ -13,6 +13,7 @@ import {
   productTitle,
   rub,
   SELLER,
+  shopMode,
   SITE_ACCOUNT,
   type PaymentRow,
 } from "@/lib/payments";
@@ -64,6 +65,15 @@ export default async function PayPage({ searchParams }: PageProps<"/pay">) {
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-balance md:text-5xl">
             Ролик или месяц
           </h1>
+
+          {shopMode() === "test" ? (
+            <p
+              role="note"
+              className="mt-6 rounded-2xl border-2 border-amber-400 bg-amber-50 px-5 py-4 text-base font-bold text-amber-950"
+            >
+              Учебный сайт: оплата тестовая, деньги не списываются
+            </p>
+          ) : null}
 
           {orderId ? <Returned orderId={orderId} payment={returned} /> : null}
           {error ? <p className="mt-6 text-sm text-red-700">Оплата не началась: {error}.</p> : null}

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkoutInput,
   createYookassaPayment,
+  shopMode,
   monthStartMsk,
   paidThisMonthRub,
   parseNotification,
@@ -447,6 +448,31 @@ describe("приёмник /api/yookassa", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mutation).not.toHaveBeenCalled();
     expect(GET().status).toBe(405);
+  });
+});
+
+describe("режим магазина по ключу (⚖️ zavod-stays-test-shop)", () => {
+  it("test_ — тест, остальное — бой, без ключей — null", () => {
+    vi.stubEnv("YOOKASSA_SHOP_ID", "1475142");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "test_abc");
+    expect(shopMode()).toBe("test");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "live_abc");
+    expect(shopMode()).toBe("live");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "");
+    expect(shopMode()).toBeNull();
+  });
+
+  it("на тестовом ключе /pay пишет «учебный сайт», на боевом — нет", async () => {
+    const { default: PayPage } = await import("@/app/pay/page");
+    const render = async () =>
+      renderToStaticMarkup(
+        await PayPage({ searchParams: Promise.resolve({}) } as Parameters<typeof PayPage>[0]),
+      );
+    vi.stubEnv("YOOKASSA_SHOP_ID", "1475142");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "test_abc");
+    expect(await render()).toContain("Учебный сайт: оплата тестовая, деньги не списываются");
+    vi.stubEnv("YOOKASSA_SECRET_KEY", "live_abc");
+    expect(await render()).not.toContain("Учебный сайт");
   });
 });
 

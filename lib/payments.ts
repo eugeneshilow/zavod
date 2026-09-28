@@ -194,6 +194,16 @@ export function paymentsAccess(): YookassaKeys | { reason: string } {
   return { shopId, secretKey };
 }
 
+/**
+ * Режим магазина по секретному ключу: у тестового магазина ЮKassa ключ
+ * начинается с `test_`. Нет ключей — `null`.
+ */
+export function shopMode(): "test" | "live" | null {
+  const keys = paymentsAccess();
+  if ("reason" in keys) return null;
+  return keys.secretKey.startsWith("test_") ? "test" : "live";
+}
+
 const API = "https://api.yookassa.ru/v3/payments";
 
 function auth(keys: YookassaKeys): string {
