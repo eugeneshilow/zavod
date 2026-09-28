@@ -159,9 +159,15 @@ describe("оплаты из кассы", () => {
   });
 
   it("оплата за этот месяц по Москве в итогах, платящие считаются", () => {
-    const view = composeCustomers({ stored: [], ideas: [], payments: [paid(10)] }, now);
+    const live = { ...paid(10), test: false } as PaymentRow;
+    const view = composeCustomers({ stored: [], ideas: [], payments: [live] }, now);
     expect(view.totals).toMatchObject({ paying: 1, paidMonthRub: 4900 });
     expect(view.customers[0]?.id).toBe("demo");
+  });
+
+  it("тестовый платёж делает клиентом, но в «оплачено за месяц» не входит", () => {
+    const view = composeCustomers({ stored: [], ideas: [], payments: [paid(10)] }, now);
+    expect(view.totals).toMatchObject({ paying: 1, paidMonthRub: 0 });
   });
 });
 
