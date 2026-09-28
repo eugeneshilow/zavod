@@ -9,6 +9,7 @@ import {
   loadAccountPayments,
   paymentsAccess,
   PRODUCTS,
+  receiptsOn,
   productTitle,
   rub,
   SELLER,
@@ -86,7 +87,9 @@ export default async function PayPage({ searchParams }: PageProps<"/pay">) {
                   className="w-full rounded-xl border border-foreground/15 bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground"
                 />
                 <span className="text-xs text-foreground/50">
-                  На неё придёт чек, по ней мы с вами свяжемся
+                  {receiptsOn()
+                    ? "На неё придёт чек, по ней мы с вами свяжемся"
+                    : "По ней мы с вами свяжемся по заказу"}
                 </span>
               </label>
 

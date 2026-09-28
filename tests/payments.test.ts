@@ -537,6 +537,8 @@ describe("оферта /offer", () => {
       expect(html).toContain(text);
     // живой магазин: оферта без плашки «это пример» (⚖️ offer-real-for-live-shop)
     expect(html).not.toContain("пример оферты");
+    // чеки выключены — оферта чек не обещает
+    expect(html).not.toContain("присылает чек");
     for (const p of PRODUCTS) {
       expect(html).toContain(p.title);
       expect(html).toContain(new Intl.NumberFormat("ru-RU").format(p.priceRub));
