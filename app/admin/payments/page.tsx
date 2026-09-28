@@ -8,6 +8,7 @@ import {
   receiptsOn,
   requestOrigin,
   rub,
+  shopMode,
   STATUS_WORD,
 } from "@/lib/payments";
 import { Box, SectionLabel } from "../_components/shell";
@@ -42,7 +43,8 @@ export default async function PaymentsPage() {
   const keys = paymentsAccess();
   const webhook = `${requestOrigin(h)}/api/yookassa`;
   const rows = "reason" in payments ? [] : payments;
-  const mode = rows.length === 0 ? "платежей ещё не было" : rows[0].test ? "тест" : "бой";
+  const shop = shopMode();
+  const mode = shop === "test" ? "тест" : shop === "live" ? "бой" : "ключей нет";
   const count = (status: string) => String(rows.filter((p) => p.status === status).length);
   return (
     <>
