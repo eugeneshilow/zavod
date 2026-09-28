@@ -122,6 +122,18 @@ describe("тариф из платежей", () => {
     ).toBe(4900);
   });
 
+  it("тестовый платёж не входит в «оплачено за месяц»: фантики — не деньги", () => {
+    expect(
+      paidThisMonthRub(
+        [
+          { ...pay({ product: "reel", amountRub: 690 }), test: true },
+          { ...pay({ product: "reel", amountRub: 690 }), test: false },
+        ],
+        now,
+      ),
+    ).toBe(690);
+  });
+
   it("цены товаров — в переносчике", () => {
     expect(PRODUCTS.map((p) => [p.id, p.priceRub])).toEqual([
       ["reel", 690],

@@ -117,11 +117,17 @@ export function monthStartMsk(now: number): number {
   return Date.UTC(msk.getUTCFullYear(), msk.getUTCMonth(), 1) - 3 * 3_600_000;
 }
 
-/** Оплачено с начала месяца по Москве, рублей. */
-export function paidThisMonthRub(payments: PaymentFact[], now = Date.now()): number {
+/**
+ * Оплачено с начала месяца по Москве, рублей: только настоящие деньги —
+ * платёж тестового магазина (фантик) в сумму не входит.
+ */
+export function paidThisMonthRub(
+  payments: (PaymentFact & { test?: boolean })[],
+  now = Date.now(),
+): number {
   const from = monthStartMsk(now);
   return payments
-    .filter((p) => p.status === "succeeded" && (p.paidAt ?? 0) >= from)
+    .filter((p) => p.status === "succeeded" && !p.test && (p.paidAt ?? 0) >= from)
     .reduce((sum, p) => sum + p.amountRub, 0);
 }
 
