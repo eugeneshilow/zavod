@@ -1,4 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 // Мозги завода читаются с диска, как и дерево админки: папка docs/brains/<id>/
@@ -239,35 +240,49 @@ export type Run = {
   voice: string | null;
 };
 
-/** След прогонов руками: json-файлы папки из паспорта («след прогона»), напр. content/reels/stories. */
+/**
+ * След прогонов руками: json-файлы папки из паспорта («след прогона»), напр.
+ * content/reels/stories. Прогон-папка (объяснялка) — её `script.json`: биты —
+ * сцены, слова — текст голоса без меток.
+ */
 export async function listRuns(brain: Brain): Promise<Run[]> {
   if (!brain.runsDir) return [];
   const dir = path.posix.normalize(brain.runsDir);
   if (dir.startsWith("..") || path.posix.isAbsolute(dir)) return [];
   let names: string[];
   try {
-    names = (await readdir(path.join(root, dir))).filter((n) => n.endsWith(".json")).sort();
+    const entries = await readdir(path.join(root, dir), { withFileTypes: true });
+    names = entries
+      .map((e) => (e.isDirectory() ? `${e.name}/script.json` : e.name))
+      .filter((n) => n.endsWith(".json"))
+      .sort();
   } catch {
     return [];
   }
   const runs: Run[] = [];
   for (const name of names) {
     const file = path.posix.join(dir, name);
-    const id = name.replace(/\.json$/, "");
+    const id = name.replace(/\/script\.json$|\.json$/, "");
+    if (name.endsWith("/script.json") && !existsSync(path.join(root, file))) continue;
     try {
       const raw = JSON.parse(await readFile(path.join(root, file), "utf8")) as {
         id?: string;
         title?: string;
         voice?: string;
         beats?: { text?: string }[];
+        scenes?: { say?: string }[];
       };
-      const beats = Array.isArray(raw.beats) ? raw.beats : [];
+      const beats = Array.isArray(raw.beats)
+        ? raw.beats.map((b) => b.text ?? "")
+        : Array.isArray(raw.scenes)
+          ? raw.scenes.map((sc) => (sc.say ?? "").replace(/\{[a-z0-9-]+\}/g, ""))
+          : [];
       runs.push({
         file,
         id: raw.id ?? id,
         title: raw.title ?? "",
         beats: beats.length,
-        words: wordCount(beats.map((b) => b.text ?? "").join(" ")),
+        words: wordCount(beats.join(" ")),
         voice: raw.voice ?? null,
       });
     } catch {
