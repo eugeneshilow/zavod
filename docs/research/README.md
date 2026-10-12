@@ -14,6 +14,10 @@
 - [explainer-videos-2026-10-03.md](explainer-videos-2026-10-03.md) —
   как Tibo сделал ролик «как работает Shazam» (revid.ai на Opus 5.5 за 20
   минут), откуда жанр (пост Карпатого), разбор ролика по кадрам, что берём.
+- [2026-10-12-promo-video-from-page/](2026-10-12-promo-video-from-page/README.md) —
+  промо-ролик из страницы сайта силами Claude Code: HyperFrames по адресу,
+  Remotion, Claude Motion, запись страницы; 25 постов X, раскадровка для
+  vibecoding.tech/services.
 - [refs.md](refs.md) — реестр доноров формы: ролики без лица и
   «говорящая голова + новости» (русские и мировые кейсы, инструменты,
   право), дописывается.
