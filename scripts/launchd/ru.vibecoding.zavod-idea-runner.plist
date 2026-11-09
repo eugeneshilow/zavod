@@ -17,6 +17,10 @@
      отличается от 0.30; NODE_OPTIONS=--dns-result-order=ipv4first — IPv6 до
      Convex с Pro уходит в VPN-туннель и даёт «fetch failed»/ETIMEDOUT.
 
+     Keys: from the macOS keychain (item zavod of service perimeter-env) through
+     hq scripts/secrets/env-keychain.mjs run, so no .env.local is needed: the
+     Convex CLI takes CONVEX_DEPLOYMENT, the voice ELEVENLABS_API_KEY from env.
+
      Установка (Pro): cp scripts/launchd/ru.vibecoding.zavod-idea-runner.plist ~/Library/LaunchAgents/
                       launchctl load ~/Library/LaunchAgents/ru.vibecoding.zavod-idea-runner.plist
      Остановка:       launchctl unload ~/Library/LaunchAgents/ru.vibecoding.zavod-idea-runner.plist
@@ -29,7 +33,7 @@
   <array>
     <string>/bin/zsh</string>
     <string>-lc</string>
-    <string>cd "$HOME/Dropbox/5-code/zavod/main" &amp;&amp; node scripts/reels/idea-runner.mjs</string>
+    <string>cd "$HOME/Dropbox/5-code/zavod/main" &amp;&amp; exec node "$HOME/Dropbox/5-code/hq/hq/scripts/secrets/env-keychain.mjs" run zavod -- node scripts/reels/idea-runner.mjs</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
