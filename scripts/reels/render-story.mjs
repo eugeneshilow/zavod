@@ -47,6 +47,7 @@ import {
   wordSpans,
   wordsPerMinute,
 } from "./story.mjs";
+import { keychainKeys } from "../with-keys.mjs";
 
 const TEMPLATE = "content/reels/template.html";
 const MEDIA_DIR = "content/reels/media";
@@ -87,9 +88,15 @@ export function ffmpegWithAss() {
   );
 }
 
-/** Ключи из .env.local, если их нет в окружении. Значения наружу не печатаются. */
+let keychain;
+/**
+ * A key from the environment, else from the macOS keychain (item `zavod`,
+ * scripts/with-keys.mjs), else from .env.local. Values are never printed.
+ */
 export function envValue(name) {
   if (process.env[name]) return process.env[name];
+  keychain ??= keychainKeys() ?? {};
+  if (keychain[name]) return keychain[name];
   if (!existsSync(".env.local")) return "";
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
     const at = line.indexOf("=");
